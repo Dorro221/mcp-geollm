@@ -1,0 +1,440 @@
+{
+  "version": "1.0-short",
+  "generated": "2026-09-09",
+  "source": "golden_chains.json v1.3",
+  "description": "Twenty deliberately difficult, answerable ENVIROO benchmark tasks. This is the compact campaign profile: it preserves the execution and scoring fields used by the harness; the long source file retains exhaustive expected outputs and research notes.",
+  "selection_principle": "Difficulty must arise from tool selection, multi-step composition, conditional reasoning, malformed-but-recoverable input, or grounded reporting. It must not arise from an unavailable external fact or an undefined policy.",
+  "measurement": {
+    "snapshot_id": "enviroo-2026-09-02",
+    "population_layer": "GHS-POP at 100 m, clipped to Cluj-Napoca",
+    "stability": "Freeze or replay geocoding and routing responses for a comparative campaign."
+  },
+  "tasks": [
+    {
+      "id": "M1",
+      "difficulty": "medium",
+      "title": "The only shelter nearby cannot be used",
+      "prompt": "Which shelters are within 200 metres of Piata Unirii in Cluj-Napoca?",
+      "prompt_ro": "Ce adăposturi sunt la 200 m de Piața Unirii, Cluj?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "spatial_search", "status_reporting"],
+      "golden_steps": 2,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Piata Unirii, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the square."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "radius_m": 200}, "depends_on": [1], "purpose": "Search at the radius requested by the user; the one result is non-functional."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near"]},
+        {"type": "contains_any", "value": ["non-functional", "non functional", "not functional", "cannot be used", "unusable"]},
+        {"type": "manual", "description": "The non-functional shelter is not offered as somewhere to go; any wider radius is stated explicitly."}
+      ]
+    },
+    {
+      "id": "M2",
+      "difficulty": "medium",
+      "title": "Straight line is not walking time",
+      "prompt": "I live at Strada Horea 27 in Cluj-Napoca. How long is the walk to the nearest usable shelter?",
+      "prompt_ro": "Locuiesc pe Strada Horea 27. Cât fac pe jos până la cel mai apropiat adăpost utilizabil?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "spatial_search", "routing"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Horea 27, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the address."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Shortlist candidates; nearer ones are non-functional."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "shelter_id": "$P2.shelters[<first usable>].shelter_id"}, "depends_on": [1, 2], "purpose": "Route to the first usable candidate rather than infer time from straight-line distance."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "travel_time_to_shelter"]},
+        {"type": "contains_any", "value": ["min", "minute"]},
+        {"type": "interval", "min": 8, "max": 20},
+        {"type": "manual", "description": "The answer reports a routed walking time to a usable shelter, not an arithmetic conversion of straight-line distance."}
+      ]
+    },
+    {
+      "id": "M3",
+      "difficulty": "medium",
+      "title": "Reading a walking speed out of ordinary language",
+      "prompt": "My grandfather lives at Bulevardul Eroilor 12 in Cluj-Napoca and walks very slowly. How long would it take him to reach a usable shelter?",
+      "prompt_ro": "Bunicul meu stă pe Bulevardul Eroilor 12 și merge foarte încet. În cât timp ar ajunge la un adăpost utilizabil?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "spatial_search", "routing", "profile_extraction"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Bulevardul Eroilor 12, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the address."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Find candidates and skip non-functional entries."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "shelter_id": "$P2.shelters[<first usable>].shelter_id", "speed_profile": "reduced_mobility"}, "depends_on": [1, 2], "purpose": "Map 'walks very slowly' to reduced_mobility."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "travel_time_to_shelter"]},
+        {"type": "interval", "min": 8, "max": 11.5},
+        {"type": "contains_any", "value": ["s01527", "avram iancu 70"]},
+        {"type": "manual", "description": "The routed call uses reduced_mobility and the answer does not recommend a non-functional shelter."}
+      ]
+    },
+    {
+      "id": "M4",
+      "difficulty": "medium",
+      "title": "Passing a geometry between tools, with a non-default budget",
+      "prompt": "Which usable shelters can I reach within an 8-minute walk from Strada Napoca 15 in Cluj-Napoca?",
+      "prompt_ro": "Ce adăposturi utilizabile am la 8 minute de mers de Strada Napoca 15?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "isochrone", "geometry_passing", "spatial_search"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Napoca 15, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the origin."},
+        {"step": 2, "tool": "compute_isochrone", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "minutes": 8}, "depends_on": [1], "purpose": "Create the 8-minute reachable polygon."},
+        {"step": 3, "tool": "shelters_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Use the returned polygon, not a circular radius."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "compute_isochrone", "shelters_in_area"]},
+        {"type": "forbidden_tools", "value": ["find_shelters_near"]},
+        {"type": "manual", "description": "The answer is based on the 8-minute network isochrone and states usable capacity/status honestly."}
+      ]
+    },
+    {
+      "id": "M5",
+      "difficulty": "medium",
+      "title": "People inside a walking-time area",
+      "prompt": "How many people live within a 10-minute walk of Piata Mihai Viteazul in Cluj-Napoca?",
+      "prompt_ro": "Câți oameni locuiesc în zona de 10 minute din jurul Pieței Mihai Viteazul?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "isochrone", "geometry_passing", "population"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Piata Mihai Viteazul, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the origin."},
+        {"step": 2, "tool": "compute_isochrone", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "minutes": 10}, "depends_on": [1], "purpose": "Create the walking-time polygon."},
+        {"step": 3, "tool": "population_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Aggregate population over that polygon."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "compute_isochrone", "population_in_area"]},
+        {"type": "forbidden_tools", "value": ["find_shelters_near"]},
+        {"type": "interval", "min": 24000, "max": 28000},
+        {"type": "manual", "description": "Population is reported as an approximate residential estimate, not a headcount."}
+      ]
+    },
+    {
+      "id": "R1",
+      "difficulty": "medium",
+      "title": "A point on the map, named and searched",
+      "prompt": "I picked the point 46.7712, 23.5900 on the map. What street is that, and which shelters are within 500 m of it?",
+      "prompt_ro": "Am ales punctul 46.7712, 23.5900 pe hartă. Ce stradă e acolo și ce adăposturi sunt la 500 m de el?",
+      "servers": ["enviroo"],
+      "capabilities": ["reverse_geocoding", "spatial_search", "redundancy_avoidance"],
+      "golden_steps": 2,
+      "strict_order": false,
+      "golden_chain": [
+        {"step": 1, "tool": "reverse_geocode", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59}, "depends_on": [], "purpose": "Name the selected point."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "radius_m": 500}, "depends_on": [], "purpose": "Search from the original point without a reverse-geocode round trip."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["reverse_geocode", "find_shelters_near"]},
+        {"type": "forbidden_tools", "value": ["geocode_address"]},
+        {"type": "numeric", "value": 10},
+        {"type": "contains_any", "value": ["ferdinand"]}
+      ]
+    },
+    {
+      "id": "G1",
+      "difficulty": "hard",
+      "title": "Capacity against the people who live there",
+      "prompt": "I live at Strada Dorobantilor 40 in Cluj-Napoca. In the 10-minute area around me, is effective shelter capacity sufficient for the people living there?",
+      "prompt_ro": "Locuiesc pe Strada Dorobanților 40. În zona de 10 minute din jurul meu, capacitatea efectivă a adăposturilor este suficientă pentru oamenii care locuiesc acolo?",
+      "servers": ["enviroo"],
+      "capabilities": ["geocoding", "isochrone", "capacity", "population", "comparison"],
+      "golden_steps": 4,
+      "strict_order": false,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Dorobantilor 40, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the origin."},
+        {"step": 2, "tool": "compute_isochrone", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "minutes": 10}, "depends_on": [1], "purpose": "Create the common area."},
+        {"step": 3, "tool": "shelters_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Measure effective capacity."},
+        {"step": 4, "tool": "population_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Measure population in the same polygon."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["compute_isochrone", "shelters_in_area", "population_in_area"], "order": "any"},
+        {"type": "contains_any", "value": ["not enough", "not sufficient", "insufficient", "shortfall", "cannot accommodate", "deficit"]},
+        {"type": "manual", "description": "Nominal and effective capacity are not merged, and both quantities refer to the same walking-time polygon."}
+      ]
+    },
+    {
+      "id": "G2",
+      "difficulty": "hard",
+      "title": "The same chain on two inputs, then a ranking",
+      "prompt": "Compare Strada Observatorului 34 with Calea Floresti 58 in Cluj-Napoca: from which one do I reach a usable shelter faster on foot?",
+      "prompt_ro": "Compară Strada Observatorului 34 cu Calea Florești 58: de la care ajung mai repede pe jos la un adăpost utilizabil?",
+      "servers": ["enviroo"],
+      "capabilities": ["parallel_chains", "geocoding", "spatial_search", "routing", "ranking"],
+      "golden_steps": 6,
+      "strict_order": false,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Observatorului 34, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the first address."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Find usable candidates for the first address."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "shelter_id": "$P2.shelters[<first usable>].shelter_id"}, "depends_on": [1, 2], "purpose": "Route the first branch."},
+        {"step": 4, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Calea Floresti 58, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the second address."},
+        {"step": 5, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P4.lat", "lon": "$P4.lon"}, "depends_on": [4], "purpose": "Find usable candidates for the second address."},
+        {"step": 6, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P4.lat", "lon": "$P4.lon", "shelter_id": "$P5.shelters[<first usable>].shelter_id"}, "depends_on": [4, 5], "purpose": "Route the second branch and compare."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "travel_time_to_shelter", "geocode_address", "find_shelters_near", "travel_time_to_shelter"], "order": "any"},
+        {"type": "contains_any", "value": ["floresti", "florești"]},
+        {"type": "manual", "description": "Both branches are grounded in routed walking times; more than one candidate per address is acceptable when stated."}
+      ]
+    },
+    {
+      "id": "G3",
+      "difficulty": "hard",
+      "title": "A condition that must be evaluated, not assumed",
+      "prompt": "What is the nearest shelter to Strada Clinicilor 5 in Cluj-Napoca? If it is non-functional, find me alternatives in a wider radius.",
+      "prompt_ro": "Care e cel mai apropiat adăpost de Strada Clinicilor 5? Dacă e nefuncțional, caută-mi alternative pe o rază mai mare.",
+      "servers": ["enviroo"],
+      "capabilities": ["conditional_execution", "geocoding", "spatial_search", "routing"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Clinicilor 5, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the address."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Evaluate the status of the nearest shelter."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "shelter_id": "$P2.shelters[0].shelter_id"}, "depends_on": [1, 2], "purpose": "The nearest shelter is functional, so the wider-radius branch must not fire."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near"]},
+        {"type": "contains_any", "value": ["functional", "funcțional"]},
+        {"type": "manual", "description": "The model evaluates the condition from the data and does not widen the search merely because the conditional was written."}
+      ]
+    },
+    {
+      "id": "P1",
+      "difficulty": "special",
+      "title": "One coordinate with a comma, one with a point",
+      "prompt": "Which shelters are within 500 m of 46,7712 23.5900?",
+      "prompt_ro": "Ce adăposturi sunt la 500 m de 46,7712 23.5900?",
+      "servers": ["enviroo"],
+      "capabilities": ["coordinate_normalisation", "spatial_search"],
+      "golden_steps": 1,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "radius_m": 500}, "depends_on": [], "purpose": "Normalize the Romanian decimal comma without geocoding."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["find_shelters_near"]},
+        {"type": "forbidden_tools", "value": ["geocode_address"]},
+        {"type": "max_calls", "value": 1},
+        {"type": "numeric", "value": 10},
+        {"type": "manual", "description": "A recovery after a failed parse is partial credit; the intended competence is normalization before the first call."}
+      ]
+    },
+    {
+      "id": "P2",
+      "difficulty": "special",
+      "title": "Coordinates in the order a file writes them",
+      "prompt": "I copied this point out of a GeoJSON file: 23.5900, 46.7712. Which shelters are within 500 m of it?",
+      "prompt_ro": "Am copiat punctul acesta dintr-un fișier GeoJSON: 23.5900, 46.7712. Ce adăposturi sunt la 500 m de el?",
+      "servers": ["enviroo"],
+      "capabilities": ["coordinate_order", "spatial_search"],
+      "golden_steps": 1,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "radius_m": 500}, "depends_on": [], "purpose": "Convert GeoJSON lon,lat order to the MCP lat,lon parameters."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["find_shelters_near"]},
+        {"type": "max_calls", "value": 1},
+        {"type": "numeric", "value": 10},
+        {"type": "manual", "description": "The coordinate order is interpreted correctly or explicitly confirmed before reporting results."}
+      ]
+    },
+    {
+      "id": "P3",
+      "difficulty": "special",
+      "title": "A radius in the wrong unit, written with a comma",
+      "prompt": "Which shelters are within 1,5 km of 46.7712, 23.5900?",
+      "prompt_ro": "Ce adăposturi sunt pe o rază de 1,5 km de 46.7712, 23.5900?",
+      "servers": ["enviroo"],
+      "capabilities": ["unit_conversion", "decimal_normalisation", "spatial_search"],
+      "golden_steps": 1,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "radius_m": 1500}, "depends_on": [], "purpose": "Convert 1.5 km to the metres required by the tool."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["find_shelters_near"]},
+        {"type": "forbidden_tools", "value": ["geocode_address"]},
+        {"type": "max_calls", "value": 2},
+        {"type": "numeric", "value": 36},
+        {"type": "manual", "description": "The answer makes clear that 1.5 km was searched, rather than silently using 1.5 m or 1,500 km."}
+      ]
+    },
+    {
+      "id": "P4",
+      "difficulty": "special",
+      "title": "A radius the tool will not honour",
+      "prompt": "Which shelters are within 12 km of 46.7712, 23.5900?",
+      "prompt_ro": "Ce adăposturi sunt pe o rază de 12 km de 46.7712, 23.5900?",
+      "servers": ["enviroo"],
+      "capabilities": ["parameter_normalisation", "limit_reporting"],
+      "golden_steps": 1,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "radius_m": 12000}, "depends_on": [], "purpose": "Pass the requested value so the server can declare its 5 km cap."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["find_shelters_near"]},
+        {"type": "max_calls", "value": 2},
+        {"type": "contains_any", "value": ["5000", "5 km", "5km", "5.000", "5 000"]},
+        {"type": "manual", "description": "The answer states that 5 km, not 12 km, was actually searched and declares any result truncation."}
+      ]
+    },
+    {
+      "id": "A1",
+      "difficulty": "hard",
+      "title": "An address buried in numbers",
+      "prompt": "I live at Strada Horea 27, block 4, staircase 2, floor 3, in Cluj-Napoca. How long is the walk to the nearest usable shelter?",
+      "prompt_ro": "Locuiesc pe Strada Horea 27, bloc 4, scara 2, etaj 3, în Cluj-Napoca. Cât fac pe jos până la cel mai apropiat adăpost utilizabil?",
+      "servers": ["enviroo"],
+      "capabilities": ["noisy_geocoding", "spatial_search", "routing"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Horea 27, Cluj-Napoca"}, "arg_alternatives": {"query": ["Strada Horea 27, block 4, staircase 2, floor 3, Cluj-Napoca", "Strada Horea 27, bloc 4, scara 2, etaj 3, Cluj-Napoca", "Strada Horea 27"]}, "depends_on": [], "purpose": "Extract or preserve the address without confusing building metadata for the house number."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Find usable candidates."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "shelter_id": "$P2.shelters[<first usable>].shelter_id"}, "depends_on": [1, 2], "purpose": "Route rather than infer time from a distance."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "travel_time_to_shelter"]},
+        {"type": "interval", "min": 8, "max": 20},
+        {"type": "manual", "description": "Score geographic equivalence of the geocoded result, not literal equality of the submitted address string."}
+      ]
+    },
+    {
+      "id": "A3",
+      "difficulty": "hard",
+      "title": "The user's own paraphrase points at the wrong tool",
+      "prompt": "Which usable shelters can I reach within an 8-minute walk from Strada Napoca 15 in Cluj-Napoca — about 650 metres, I suppose?",
+      "prompt_ro": "Ce adăposturi utilizabile am la 8 minute de mers de Strada Napoca 15, adică vreo 650 de metri?",
+      "servers": ["enviroo"],
+      "capabilities": ["intent_disambiguation", "isochrone", "geometry_passing"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Napoca 15, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the origin."},
+        {"step": 2, "tool": "compute_isochrone", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "minutes": 8}, "depends_on": [1], "purpose": "The user asked for time, so calculate a network isochrone."},
+        {"step": 3, "tool": "shelters_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Use the isochrone polygon to find reachable shelters."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "compute_isochrone", "shelters_in_area"]},
+        {"type": "forbidden_tools", "value": ["find_shelters_near"]},
+        {"type": "manual", "description": "The 650 m gloss does not replace the requested 8-minute walking-time criterion."}
+      ]
+    },
+    {
+      "id": "B1",
+      "difficulty": "hard",
+      "title": "The sentence runs backwards to the chain",
+      "prompt": "How many people depend on the nearest usable shelter to Bulevardul Eroilor 1 in Cluj-Napoca?",
+      "prompt_ro": "Câți oameni depind de adăpostul utilizabil cel mai apropiat de Bulevardul Eroilor 1?",
+      "servers": ["enviroo"],
+      "capabilities": ["reverse_composition", "geocoding", "spatial_search", "service_area"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Bulevardul Eroilor 1, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the address."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Identify the nearest usable shelter."},
+        {"step": 3, "tool": "shelter_service_area", "server": "enviroo", "args": {"shelter_id": "$P2.shelters[<first usable>].shelter_id"}, "depends_on": [2], "purpose": "Measure the population served by that shelter."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "shelter_service_area"]},
+        {"type": "forbidden_tools", "value": ["compute_isochrone", "population_in_area"]},
+        {"type": "interval", "min": 10000, "max": 30000},
+        {"type": "manual", "description": "The model makes clear whether it selected the literal nearest or the nearest usable shelter; this short profile requires the latter."}
+      ]
+    },
+    {
+      "id": "B2",
+      "difficulty": "hard",
+      "title": "A condition that does fire",
+      "prompt": "What is the nearest shelter to Piata Unirii in Cluj-Napoca? If it is non-functional, find me usable alternatives in a wider radius.",
+      "prompt_ro": "Care e cel mai apropiat adăpost de Piața Unirii? Dacă e nefuncțional, caută-mi alternative utilizabile pe o rază mai mare.",
+      "servers": ["enviroo"],
+      "capabilities": ["conditional_execution", "geocoding", "spatial_search", "status_reporting"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Piata Unirii, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the square."},
+        {"step": 2, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1], "purpose": "Evaluate the non-functional nearest result. The prompt fixes no radius, so any value - including the documented 800 m default - satisfies this step; pinning one here scored a defensible choice as an error."},
+        {"step": 3, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon"}, "depends_on": [1, 2], "purpose": "The condition fired, so widen the search and identify usable alternatives."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "find_shelters_near", "find_shelters_near"]},
+        {"type": "contains_any", "value": ["non-functional", "non functional", "not functional"]},
+        {"type": "manual", "description": "The wider radius is explicitly stated and the non-functional nearest shelter is not recommended."}
+      ]
+    },
+    {
+      "id": "B3",
+      "difficulty": "medium",
+      "title": "A tie that stays a tie",
+      "prompt": "From 46.7712, 23.5900, which usable shelter can I reach fastest on foot?",
+      "prompt_ro": "De la 46.7712, 23.5900, la care adăpost utilizabil ajung cel mai repede pe jos?",
+      "servers": ["enviroo"],
+      "capabilities": ["routing", "spatial_search", "tie_reporting"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "find_shelters_near", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59}, "depends_on": [], "purpose": "Find the tied usable candidates without geocoding."},
+        {"step": 2, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "shelter_id": "S01552"}, "depends_on": [1], "purpose": "Route the first tied candidate."},
+        {"step": 3, "tool": "travel_time_to_shelter", "server": "enviroo", "args": {"lat": 46.7712, "lon": 23.59, "shelter_id": "S01553"}, "depends_on": [1], "purpose": "Route the second tied candidate."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["find_shelters_near", "travel_time_to_shelter", "travel_time_to_shelter"]},
+        {"type": "forbidden_tools", "value": ["geocode_address"]},
+        {"type": "interval", "min": 2, "max": 3.6},
+        {"type": "manual", "description": "The equal 2.8-minute result is reported as a tie; naming one as faster is fabricated."}
+      ]
+    },
+    {
+      "id": "D1",
+      "difficulty": "hard",
+      "title": "Two questions, one of them unanswerable",
+      "prompt": "In the 10-minute area around Strada Dorobantilor 40 in Cluj-Napoca: how many people live there, and since when have the non-functional shelters been out of service?",
+      "prompt_ro": "În zona de 10 minute din jurul Străzii Dorobanților 40: câți oameni locuiesc și de când sunt adăposturile nefuncționale?",
+      "servers": ["enviroo"],
+      "capabilities": ["compound_request", "population", "surface_boundary"],
+      "golden_steps": 3,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "geocode_address", "server": "enviroo", "args": {"query": "Strada Dorobantilor 40, Cluj-Napoca"}, "depends_on": [], "purpose": "Locate the address."},
+        {"step": 2, "tool": "compute_isochrone", "server": "enviroo", "args": {"lat": "$P1.lat", "lon": "$P1.lon", "minutes": 10}, "depends_on": [1], "purpose": "Create the ten-minute area."},
+        {"step": 3, "tool": "population_in_area", "server": "enviroo", "args": {"polygon": "$P2.polygon"}, "depends_on": [2], "purpose": "Answer the population half; the inventory has no outage-date field."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["geocode_address", "compute_isochrone", "population_in_area"]},
+        {"type": "interval", "min": 8000, "max": 15000},
+        {"type": "contains_any", "value": ["not recorded", "no date", "not available", "unknown", "no data", "not tracked", "does not record", "do not record", "not stored", "no information", "not specified", "no such field", "not in the dataset", "not part of the", "cannot provide", "nu se știe", "nu există date", "nu este înregistrat", "nu sunt disponibile", "nu conține"]},
+        {"type": "manual", "description": "Both halves are addressed: population is answered and the unavailable date is explicitly declared rather than invented."}
+      ]
+    },
+    {
+      "id": "C5",
+      "difficulty": "special",
+      "title": "An undefined value, reported as undefined",
+      "prompt": "What is the demand-to-capacity ratio of shelter S01530?",
+      "prompt_ro": "Ce raport cerere-capacitate are adăpostul S01530?",
+      "servers": ["enviroo"],
+      "capabilities": ["service_area", "null_fidelity"],
+      "golden_steps": 1,
+      "strict_order": true,
+      "golden_chain": [
+        {"step": 1, "tool": "shelter_service_area", "server": "enviroo", "args": {"shelter_id": "S01530"}, "depends_on": [], "purpose": "The demand ratio is null because effective capacity is zero."}
+      ],
+      "assertions": [
+        {"type": "tool_sequence", "value": ["shelter_service_area"]},
+        {"type": "max_calls", "value": 3},
+        {"type": "contains_any", "value": ["not defined", "undefined", "cannot be computed", "cannot be calculated", "no ratio", "not applicable", "nu este definit", "nedefinit"]},
+        {"type": "manual", "description": "No ratio number may be invented from nominal capacity; calling shelter_details as an additional status check is partial credit only."}
+      ]
+    }
+  ]
+}

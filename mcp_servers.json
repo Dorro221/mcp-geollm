@@ -1,0 +1,19 @@
+{
+  "servers": [
+    {
+      "url": "http://localhost:9100/mcp",
+      "label": "ENVIROO shelters · rich",
+      "enabled": true
+    },
+    {
+      "url": "http://localhost:9101/mcp",
+      "label": "ENVIROO shelters · minimal",
+      "enabled": true
+    },
+    {
+      "url": "http://localhost:9102/mcp",
+      "label": "ENVIROO shelters · bare",
+      "enabled": true
+    }
+  ]
+}

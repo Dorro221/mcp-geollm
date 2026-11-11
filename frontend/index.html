@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ENVIROO — Shelter Accessibility</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c1116;--surface:#151b22;--elevated:#1d252e;--input:#232c37;
+  --border:#2f3946;--border-f:#1d252e;
+  /* Primary accent: civil-protection amber. Status colours below are not
+     decoration - they carry the functional state of a shelter. */
+  --acc:#fb923c;--acc-d:#9a3412;--acc-g:rgba(251,146,60,.13);
+  --amber:#f59e0b;--red:#ef4444;--green:#22c55e;--purple:#a78bfa;--sky:#38bdf8;
+  --txt:#e5e9f0;--muted:#64748b;--dim:#475569;
+  --sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace;
+  --r:8px;--chat:390px
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--txt);height:100dvh;display:flex;overflow:hidden}
+#map-wrap{flex:1;position:relative;min-width:0}
+#map{width:100%;height:100%;background:#090d13}
+.leaflet-control-attribution{background:rgba(12,17,22,.85)!important;color:var(--dim)!important;font-size:10px!important}
+.leaflet-control-attribution a{color:var(--acc-d)!important}
+#toolbar{position:absolute;top:12px;left:12px;z-index:1000;display:flex;flex-direction:column;gap:7px}
+.tb{width:34px;height:34px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s}
+.tb:hover{background:var(--elevated);color:var(--acc);border-color:var(--acc-d)}
+.tb.on{color:var(--acc);border-color:var(--acc);background:var(--acc-g)}
+#layers{position:absolute;top:12px;right:12px;z-index:1000;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;font-size:11px;
+  color:var(--muted);display:flex;flex-direction:column;gap:6px;min-width:150px}
+.li{display:flex;align-items:center;gap:7px;cursor:pointer;transition:color .15s;user-select:none}
+.li:hover{color:var(--txt)}.ld{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.lc{flex:1}.lk{background:var(--elevated);border-radius:10px;padding:1px 6px;font-size:10px;color:var(--dim)}
+#coords{position:absolute;bottom:26px;left:12px;z-index:1000;background:rgba(12,17,22,.85);
+  border:1px solid var(--border-f);border-radius:6px;padding:4px 9px;
+  font-family:var(--mono);font-size:11px;color:var(--dim);pointer-events:none}
+#legend{position:absolute;bottom:26px;right:12px;z-index:1000;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;font-size:11px;
+  color:var(--muted);display:none;flex-direction:column;gap:5px;max-width:230px}
+.lg-t{font-weight:600;color:var(--txt);font-size:11px;margin-bottom:2px}
+.lg-r{display:flex;align-items:center;gap:7px}
+.lg-sw{width:16px;height:4px;border-radius:2px;flex-shrink:0}
+.lg-sw.circ{height:10px;width:10px;border-radius:50%;border:2px solid;background:transparent}
+.leaflet-popup-content-wrapper{background:var(--elevated)!important;border:1px solid var(--border)!important;
+  border-radius:var(--r)!important;color:var(--txt)!important;box-shadow:0 4px 20px rgba(0,0,0,.5)!important}
+.leaflet-popup-tip{background:var(--elevated)!important}
+.leaflet-popup-content{font-size:12px;line-height:1.6}
+.pc{font-family:var(--mono);color:var(--acc);font-size:11px}
+.pb{display:inline-block;margin-top:6px;background:var(--acc-d);color:#fff7ed;border:none;
+  border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer}
+.pb:hover{background:var(--acc)}
+.st-pill{display:inline-block;border-radius:4px;padding:0 5px;font-size:10px;font-weight:600}
+.cap-gap{color:var(--amber)}
+#chat{width:var(--chat);min-width:var(--chat);max-width:var(--chat);height:100dvh;
+  background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative;z-index:10}
+/* Drag handle for the chat width. Wider than it looks: the visible line is
+   1px, but the grab area is 9px, because a 1px target is a target users miss. */
+#chat-grip{position:absolute;left:-5px;top:0;bottom:0;width:9px;z-index:60;
+  cursor:col-resize;touch-action:none}
+#chat-grip::after{content:'';position:absolute;left:4px;top:0;bottom:0;width:1px;
+  background:transparent;transition:background .15s}
+#chat-grip:hover::after,body.resizing #chat-grip::after{background:var(--acc)}
+/* While dragging: the pointer is captured, but the map would still show its
+   own grab cursor and the text under it would select. */
+body.resizing{cursor:col-resize;user-select:none}
+body.resizing #map{pointer-events:none}
+#chat-hd{padding:13px 15px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;flex-shrink:0}
+.logo{width:31px;height:31px;background:var(--acc-g);border:1px solid var(--acc-d);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+#chat-hd h1{font-size:13px;font-weight:600;letter-spacing:-.2px;line-height:1}
+#chat-hd p{font-size:10px;color:var(--muted);margin-top:2px}
+#model-sel{margin-left:auto;background:var(--input);border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-size:10px;padding:3px 5px;max-width:140px;outline:none;cursor:pointer}
+#model-sel:hover,#model-sel:focus{border-color:var(--acc-d);color:var(--txt)}
+#dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0;transition:background .3s}
+#dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+#dot.err{background:var(--red)}
+#msgs{flex:1;overflow-y:auto;padding:11px 11px 0;display:flex;flex-direction:column;gap:2px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+#msgs::-webkit-scrollbar{width:4px}
+#msgs::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.row{display:flex;flex-direction:column;max-width:100%;padding:2px 0}
+.row.u{align-items:flex-end}.row.a{align-items:flex-start}
+.bubble{padding:8px 11px;border-radius:11px;font-size:13px;line-height:1.55;max-width:93%;word-break:break-word}
+.row.u .bubble{background:var(--acc-d);color:#fff7ed;border-bottom-right-radius:3px}
+.row.a .bubble{background:var(--elevated);color:var(--txt);border-bottom-left-radius:3px;border:1px solid var(--border-f)}
+.bubble p{margin-bottom:5px}.bubble p:last-child{margin-bottom:0}
+.bubble ul,.bubble ol{padding-left:15px}
+.bubble code{font-family:var(--mono);font-size:11px;background:rgba(0,0,0,.3);padding:1px 4px;border-radius:3px}
+.bubble strong{color:var(--acc);font-weight:600}
+.card{background:var(--elevated);border:1px solid var(--border);border-left:3px solid var(--acc);
+  border-radius:7px;padding:9px 11px;font-size:12px;margin:3px 0;transition:all .15s}
+.card.err{border-left-color:var(--red)}
+.card-t{font-weight:600;color:var(--acc);font-size:12px;margin-bottom:3px}
+.card.err .card-t{color:var(--red)}
+.card-m{color:var(--muted);font-size:11px;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.badge{background:var(--bg);border-radius:4px;padding:1px 5px;font-size:10px;color:var(--dim)}
+.typing{display:flex;gap:4px;padding:9px 11px;background:var(--elevated);border:1px solid var(--border-f);
+  border-radius:11px;border-bottom-left-radius:3px;width:fit-content}
+.td{width:6px;height:6px;background:var(--muted);border-radius:50%;animation:bop 1.2s infinite}
+.td:nth-child(2){animation-delay:.2s}.td:nth-child(3){animation-delay:.4s}
+@keyframes bop{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-5px);opacity:1}}
+#sugg{padding:7px 11px;display:flex;flex-wrap:wrap;gap:5px;border-top:1px solid var(--border-f);flex-shrink:0}
+.chip{background:var(--elevated);border:1px solid var(--border);border-radius:15px;padding:4px 9px;
+  font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.chip:hover{color:var(--acc);border-color:var(--acc-d);background:var(--acc-g)}
+#inp-area{padding:9px 11px 13px;border-top:1px solid var(--border);flex-shrink:0}
+#inp-wrap{display:flex;gap:7px;align-items:flex-end;background:var(--input);
+  border:1px solid var(--border);border-radius:9px;padding:7px 7px 7px 11px;transition:border-color .15s}
+#inp-wrap:focus-within{border-color:var(--acc-d)}
+#inp{flex:1;background:none;border:none;outline:none;color:var(--txt);font-size:13px;
+  font-family:var(--sans);resize:none;max-height:110px;min-height:20px;line-height:1.5}
+#inp::placeholder{color:var(--dim)}
+#send{width:30px;height:30px;background:var(--acc-d);border:none;border-radius:6px;cursor:pointer;
+  color:#fff7ed;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;transition:all .15s}
+#send:hover{background:var(--acc)}
+#send:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+@media(max-width:680px){
+  #chat{position:absolute;right:0;top:0;bottom:0;transform:translateX(100%);transition:transform .25s;
+    width:min(var(--chat),100vw);max-width:100vw}
+  #chat.open{transform:translateX(0)}
+  #mob-btn{display:flex!important}
+  /* The panel slides over the map here instead of sharing the row with it,
+     so there is no boundary to drag. */
+  #chat-grip{display:none}
+}
+#mob-btn{display:none;position:absolute;bottom:18px;right:18px;z-index:1100;
+  width:46px;height:46px;background:var(--acc-d);border:none;border-radius:50%;
+  color:#fff7ed;font-size:21px;cursor:pointer;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(0,0,0,.4)}
+/* ── MCP servers & tools panel ── */
+#mcp-btn{background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--muted);
+  font-size:12px;padding:3px 6px;cursor:pointer;line-height:1;display:flex;align-items:center;gap:3px}
+#mcp-btn:hover{border-color:var(--acc-d);color:var(--acc)}
+#mcp-btn .cnt{font-size:9px;background:var(--acc-d);color:#fff7ed;border-radius:8px;padding:0 4px;min-width:14px;text-align:center}
+#mcp-panel{position:absolute;inset:0;background:var(--surface);z-index:50;display:flex;flex-direction:column}
+#mcp-panel.hidden{display:none}
+.mcp-hd{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;flex-shrink:0}
+.mcp-hd h2{font-size:13px;font-weight:600;flex:1}
+.mcp-hd button{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer}
+.mcp-hd button:hover{color:var(--txt)}
+.mcp-add{padding:10px 12px;border-bottom:1px solid var(--border-f);display:flex;flex-wrap:wrap;gap:6px}
+.mcp-add input{flex:1;min-width:130px;background:var(--input);border:1px solid var(--border);border-radius:6px;
+  color:var(--txt);font-size:11px;padding:6px 8px;font-family:var(--mono);outline:none}
+.mcp-add input:focus{border-color:var(--acc-d)}
+.mcp-add button{background:var(--acc-d);color:#fff7ed;border:none;border-radius:6px;padding:6px 10px;
+  font-size:11px;cursor:pointer;white-space:nowrap}
+.mcp-add button:hover{background:var(--acc)}
+.mcp-add button:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+#mcp-err{color:var(--red);font-size:10px;padding:0 12px}
+#mcp-err:not(:empty){padding:6px 12px 0}
+#mcp-list{flex:1;overflow-y:auto;padding:8px 12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+#mcp-list::-webkit-scrollbar{width:4px}
+#mcp-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.srv{background:var(--elevated);border:1px solid var(--border);border-radius:7px;margin-bottom:8px;overflow:hidden}
+.srv-hd{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;user-select:none}
+.srv-hd:hover{background:var(--acc-g)}
+.srv-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.srv-dot.ok{background:var(--green)}.srv-dot.err{background:var(--red)}
+.srv-dot.off{background:var(--dim)}
+/* A switched-off server keeps its place and its URL; it just is not queried. */
+.srv.off{opacity:.55}
+.srv.off .srv-nm{font-weight:500}
+/* Which description set a server publishes. The character count is measured
+   from what arrived, so a mislabelled server shows up as a wrong number. */
+.srv-reg{font-size:9px;border-radius:8px;padding:1px 6px;font-family:var(--mono);
+  background:var(--bg);color:var(--dim);white-space:nowrap}
+.srv-reg.rich{color:var(--acc)}
+.srv-reg.minimal{color:var(--sky)}
+/* The on/off switch, kept apart from the delete button so a swap between arms
+   cannot cost you the URL. */
+.srv-on{background:none;border:1px solid var(--border);border-radius:10px;color:var(--dim);
+  font-size:9px;padding:1px 7px;cursor:pointer;white-space:nowrap}
+.srv-on:hover{border-color:var(--acc-d);color:var(--acc)}
+.srv-on.is-on{background:var(--acc-g);border-color:var(--acc-d);color:var(--acc)}
+.srv-nm{font-weight:600;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srv-ct{font-size:10px;color:var(--dim);background:var(--bg);border-radius:8px;padding:1px 6px}
+.srv-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px}
+.srv-del:hover{color:var(--red)}
+.srv-url{font-family:var(--mono);font-size:9px;color:var(--dim);padding:0 10px 5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srv-actions{display:flex;gap:10px;padding:0 10px 5px}
+.srv-actions a{font-size:10px;color:var(--acc-d);cursor:pointer}
+.srv-actions a:hover{color:var(--acc)}
+.srv-tools{padding:0 8px 8px;display:flex;flex-direction:column;gap:1px}
+.tool-row{display:flex;align-items:center;gap:7px;padding:3px 4px;border-radius:4px;cursor:pointer}
+.tool-row:hover{background:var(--acc-g)}
+.tool-row input{accent-color:var(--acc);cursor:pointer;flex-shrink:0}
+.tool-row .tn{font-family:var(--mono);font-size:10px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcp-ft{padding:9px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mcp-ft button{background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--muted);
+  font-size:11px;padding:5px 9px;cursor:pointer}
+.mcp-ft button:hover{border-color:var(--acc-d);color:var(--acc)}
+.mcp-ft span{font-size:10px;color:var(--dim);margin-left:auto;text-align:right}
+/* The description regime every benchmark row will be stamped with. Shown here
+   because the only realistic way to spoil the experiment is to start a run
+   under the arm you did not mean to. */
+.mcp-ft .reg{margin-left:auto;font-family:var(--mono);font-size:9px;border-radius:8px;
+  padding:1px 7px;background:var(--bg)}
+.mcp-ft .reg.rich{color:var(--acc)}
+.mcp-ft .reg.minimal{color:var(--sky)}
+.mcp-ft .reg.bad{color:var(--red);background:rgba(239,68,68,.12)}
+.mcp-ft #mcp-total{margin-left:8px}
+/* ── Benchmark panel ── */
+#bench-btn{background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--muted);
+  font-size:12px;padding:3px 6px;cursor:pointer;line-height:1;display:flex;align-items:center}
+#bench-btn:hover{border-color:var(--purple);color:var(--purple)}
+#bench-panel{position:absolute;inset:0;background:var(--surface);z-index:51;display:flex;flex-direction:column}
+#bench-panel.hidden{display:none}
+/* Wide mode leaves the 390px sidebar and covers the window; `fixed` is
+   relative to the viewport, and on mobile the sidebar is already full width. */
+#bench-panel.wide{position:fixed;inset:0;width:100vw;max-width:100vw;z-index:2000;
+  border-left:none;box-shadow:0 0 40px rgba(0,0,0,.6)}
+#bench-panel.wide #bench-body{padding:14px 22px}
+#bench-panel.wide .bn-cfg{padding:10px 22px}
+#bench-panel.wide .bn-ft,#bench-panel.wide .mcp-hd{padding-left:22px;padding-right:22px}
+#bench-panel.wide .bn-ans{max-height:none}
+#bn-wide{background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;line-height:1}
+#bn-wide:hover{color:var(--purple)}
+.bn-cfg{padding:10px 12px;border-bottom:1px solid var(--border-f);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bn-cfg select{flex:1;min-width:120px;background:var(--input);border:1px solid var(--border);border-radius:6px;
+  color:var(--txt);font-size:11px;padding:6px 7px;outline:none;cursor:pointer}
+.bn-cfg select:focus{border-color:var(--purple)}
+.bn-cfg button{background:var(--purple);color:#1a1030;border:none;border-radius:6px;padding:6px 12px;
+  font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.bn-cfg button:hover{filter:brightness(1.12)}
+.bn-cfg button:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+#bench-body{flex:1;overflow-y:auto;padding:10px 12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+#bench-body::-webkit-scrollbar{width:4px}
+#bench-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.bn-task{background:var(--elevated);border:1px solid var(--border);border-radius:7px;padding:9px 10px;margin-bottom:9px}
+.bn-task .q{font-size:11px;color:var(--txt);line-height:1.45}
+.bn-task .m{font-size:10px;color:var(--dim);margin-top:5px;display:flex;gap:7px;flex-wrap:wrap}
+.bn-tag{background:var(--bg);border-radius:4px;padding:1px 5px}
+.bn-tag.easy{color:var(--green)}.bn-tag.medium{color:var(--amber)}.bn-tag.hard{color:var(--red)}
+/* The transversal categories (clarification, false premise, null fidelity) are
+   not a step up in difficulty - they test a different thing - so they get a
+   colour of their own rather than a place on the green-amber-red scale. */
+.bn-tag.special{color:var(--purple)}
+.bn-ref{font-size:10px;color:var(--muted);line-height:1.5;background:var(--elevated);
+  border:1px solid var(--border);border-radius:6px;padding:7px 9px}
+.bn-ro{font-size:10px;color:var(--dim);line-height:1.45;margin-top:5px;font-style:italic}
+.bn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin-bottom:10px}
+.bn-kpi{background:var(--elevated);border:1px solid var(--border);border-radius:6px;padding:7px 8px}
+.bn-kpi .k{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
+.bn-kpi .v{font-size:15px;font-weight:600;font-family:var(--mono);margin-top:2px}
+.bn-kpi .v.ok{color:var(--green)}.bn-kpi .v.bad{color:var(--red)}.bn-kpi .v.warn{color:var(--amber)}
+.bn-sec{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px}
+.bn-chain{display:flex;flex-direction:column;gap:2px}
+.bn-step{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:4px;background:var(--elevated);
+  font-family:var(--mono);font-size:10px}
+.bn-step .ix{color:var(--dim);min-width:16px}
+.bn-step .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bn-step.hit{border-left:2px solid var(--green)}
+.bn-step.miss{border-left:2px solid var(--red);opacity:.65}
+.bn-step.extra{border-left:2px solid var(--amber)}
+.bn-step.disc{border-left:2px solid var(--dim);opacity:.7}
+.bn-step .st{font-size:9px;color:var(--dim)}
+.bn-step.can-open{cursor:pointer}
+.bn-step.can-open:hover{background:var(--acc-g)}
+.bn-step .ch{font-size:9px;color:var(--dim);transition:transform .15s;display:inline-block}
+.bn-step.open .ch{transform:rotate(90deg)}
+.bn-step .err-dot{color:var(--red);font-size:9px}
+.bn-args{background:var(--bg);border:1px solid var(--border-f);border-left:2px solid var(--border);
+  border-radius:0 5px 5px 0;margin:0 0 2px 8px;padding:6px 8px;display:none}
+.bn-args.open{display:block}
+.bn-args-h{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.bn-args pre{font-family:var(--mono);font-size:10px;line-height:1.45;color:var(--txt);
+  white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto;margin:0}
+.bn-args .cerr{margin-top:5px;color:var(--red);font-family:var(--mono);font-size:10px;
+  white-space:pre-wrap;word-break:break-word}
+.bn-chain-tools{display:flex;gap:8px;align-items:center;margin-bottom:5px}
+.bn-chain-tools a{font-size:10px;color:var(--acc-d);cursor:pointer}
+.bn-chain-tools a:hover{color:var(--acc)}
+.bn-ans{background:var(--bg);border:1px solid var(--border-f);border-radius:6px;padding:8px 9px;
+  font-size:11px;line-height:1.5;color:var(--txt);white-space:pre-wrap;max-height:220px;overflow-y:auto}
+.bn-err{background:rgba(239,68,68,.09);border:1px solid var(--red);border-radius:6px;padding:7px 9px;
+  font-size:10px;color:var(--red);font-family:var(--mono);margin-bottom:9px}
+.bn-asrt{display:flex;align-items:flex-start;gap:6px;font-size:10px;padding:2px 0;color:var(--muted)}
+.bn-asrt .b{flex-shrink:0;width:13px}
+.bn-asrt.ok .b{color:var(--green)}.bn-asrt.fail .b{color:var(--red)}.bn-asrt.manual .b{color:var(--amber)}
+.bn-verdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.bn-verdict button{background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--muted);
+  font-size:10px;padding:4px 9px;cursor:pointer}
+.bn-verdict button:hover{border-color:var(--purple);color:var(--purple)}
+.bn-verdict button.on{background:var(--purple);color:#1a1030;border-color:var(--purple)}
+#bn-note{width:100%;background:var(--input);border:1px solid var(--border);border-radius:6px;
+  color:var(--txt);font-size:11px;font-family:var(--sans);padding:7px 8px;outline:none;
+  resize:vertical;min-height:62px;line-height:1.45}
+#bn-note:focus{border-color:var(--purple)}
+#bn-note::placeholder{color:var(--dim)}
+.bn-save{display:flex;align-items:center;gap:9px;margin-top:8px}
+.bn-save button{background:var(--purple);color:#1a1030;border:none;border-radius:6px;
+  padding:7px 16px;font-size:11px;font-weight:600;cursor:pointer}
+.bn-save button:hover{filter:brightness(1.12)}
+.bn-save button:disabled{background:var(--border);color:var(--dim);cursor:not-allowed}
+.bn-save .msg{font-size:10px;color:var(--dim);font-family:var(--mono)}
+.bn-save .msg.ok{color:var(--green)}
+.bn-save .msg.err{color:var(--red)}
+.bn-tbl{width:100%;border-collapse:collapse;font-size:10px}
+.bn-tbl th{text-align:left;color:var(--dim);font-weight:500;padding:4px 5px;border-bottom:1px solid var(--border)}
+.bn-tbl td{padding:4px 5px;border-bottom:1px solid var(--border-f);font-family:var(--mono);color:var(--txt)}
+.bn-tbl tr:hover td{background:var(--elevated)}
+.bn-ft{padding:9px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.bn-ft button{background:var(--input);border:1px solid var(--border);border-radius:6px;color:var(--muted);
+  font-size:11px;padding:5px 9px;cursor:pointer}
+.bn-ft button:hover{border-color:var(--purple);color:var(--purple)}
+.bn-ft span{font-size:10px;color:var(--dim);margin-left:auto;font-family:var(--mono)}
+.bn-cfg button.stop{background:var(--red);color:#fff}
+.bn-allm{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);white-space:nowrap}
+.bn-allm input{accent-color:var(--purple);cursor:pointer}
+/* Progress for a sweep. The bar is the only part of the panel that survives a
+   task finishing, so it is where the running total lives. */
+.bn-bulk{padding:10px 0;font-size:11px}
+.bn-bulk .hd{display:flex;align-items:center;gap:7px;color:var(--purple);margin-bottom:7px}
+.bn-bulk .bar{height:4px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.bn-bulk .bar i{display:block;height:100%;background:var(--purple);transition:width .2s}
+.bn-bulk .log{max-height:230px;overflow-y:auto;font-family:var(--mono);font-size:10px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.bn-bulk .log div{padding:1px 0;color:var(--dim)}
+.bn-bulk .log .ok{color:var(--green)}
+.bn-bulk .log .no{color:var(--amber)}
+.bn-bulk .log .er{color:var(--red)}
+.bn-run{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--purple);padding:10px 0}
+.bn-run .sp{width:11px;height:11px;border:2px solid var(--purple);border-right-color:transparent;
+  border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="map-wrap">
+  <div id="map"></div>
+  <div id="toolbar">
+    <button class="tb on" id="bt-osm" title="OSM dark">🗺</button>
+    <button class="tb"    id="bt-sat" title="Satellite">🛰</button>
+    <button class="tb"    id="bt-sel" title="Select an area (drag a rectangle)">▭</button>
+    <button class="tb"    id="bt-del" title="Clear layers">🗑</button>
+    <button class="tb"    id="bt-fit" title="Fit layers">⊡</button>
+  </div>
+  <div id="layers">
+    <div style="font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">Layers</div>
+    <div class="li" data-g="shelters"><div class="ld" style="background:#fb923c"></div><span class="lc">Shelters</span><span class="lk" id="c-shelters">0</span></div>
+    <div class="li" data-g="iso"><div class="ld" style="background:#a78bfa"></div><span class="lc">Isochrones</span><span class="lk" id="c-iso">0</span></div>
+    <div class="li" data-g="service"><div class="ld" style="background:#38bdf8"></div><span class="lc">Service area</span><span class="lk" id="c-service">0</span></div>
+    <div class="li" data-g="points"><div class="ld" style="background:#f472b6"></div><span class="lc">Located points</span><span class="lk" id="c-points">0</span></div>
+    <div class="li" data-g="selection"><div class="ld" style="background:#e879f9"></div><span class="lc">Selection</span><span class="lk" id="c-selection">0</span></div>
+  </div>
+  <div id="coords">—</div>
+  <div id="legend"></div>
+  <button id="mob-btn">💬</button>
+</div>
+
+<div id="chat">
+  <div id="chat-grip" title="Drag to resize · double-click to reset"></div>
+  <div id="chat-hd">
+    <div class="logo">🛡</div>
+    <div><h1>ENVIROO</h1><p>Shelter accessibility · MCP · multi-model</p></div>
+    <select id="model-sel" title="LLM used for this conversation"></select>
+    <button id="bench-btn" title="Benchmark — run a task and see the metrics">🧪</button>
+    <button id="mcp-btn" title="MCP servers & tools">🧩<span class="cnt" id="mcp-cnt">—</span></button>
+    <div id="dot"></div>
+  </div>
+
+  <div id="mcp-panel" class="hidden">
+    <div class="mcp-hd"><h2>MCP servers &amp; tools</h2><button id="mcp-close" title="Close">✕</button></div>
+    <div class="mcp-add">
+      <input id="mcp-url" placeholder="http://localhost:9100/mcp" spellcheck="false">
+      <input id="mcp-label" placeholder="name (optional)" spellcheck="false" style="max-width:110px">
+      <button id="mcp-add-btn">＋ Add</button>
+    </div>
+    <div id="mcp-err"></div>
+    <div id="mcp-list"></div>
+    <div class="mcp-ft">
+      <button id="mcp-refresh">↻ Rescan</button>
+      <button id="mcp-all">All</button>
+      <button id="mcp-none">None</button>
+      <span id="mcp-regime" class="reg"></span>
+      <span id="mcp-total"></span>
+    </div>
+  </div>
+
+  <div id="bench-panel" class="hidden">
+    <div class="mcp-hd"><h2>Benchmark — task × model</h2>
+      <button id="bn-wide" title="Expand panel (full window)">⤢</button>
+      <button id="bench-close" title="Close">✕</button></div>
+    <div class="bn-cfg">
+      <select id="bn-task"></select>
+      <select id="bn-model"></select>
+      <button id="bn-run">▶ Run</button>
+      <button id="bn-run-all" title="Run every task, in order, with the model selected (or with all of them)">▶▶ Run all</button>
+      <button id="bn-stop" class="stop" hidden>■ Stop</button>
+      <label class="bn-allm" title="Sweep every model with an API key, one after another"><input type="checkbox" id="bn-all-models"> all models</label>
+    </div>
+    <div id="bench-body"></div>
+    <div class="bn-ft">
+      <button id="bn-hist">📊 History</button>
+      <button id="bn-csv">⬇ metrics</button>
+      <button id="bn-obs">⬇ observations</button>
+      <span id="bn-status">—</span>
+    </div>
+  </div>
+
+  <div id="msgs">
+    <div class="row a"><div class="bubble">
+      ENVIROO analyses access to civil-protection shelters.<br>
+      Ask which shelters are near an address, how long they take to reach on foot,
+      what is reachable within a walking time, and whether capacity matches the
+      people living there.<br><br>
+      Click the map or type a question.
+    </div></div>
+  </div>
+
+  <div id="sugg">
+    <div class="chip" data-t="Which shelters are near Strada Memorandumului 21, Cluj-Napoca?">🛡 Shelters nearby</div>
+    <div class="chip" data-t="I am at Piata Unirii in Cluj-Napoca with my elderly mother. Which shelter can she actually reach fastest on foot?">🚶 Fastest on foot</div>
+    <div class="chip" data-t="What shelters can I reach in 10 minutes walking from Piata Victoriei, Bucharest?">⏱ 10-minute walk</div>
+    <div class="chip" data-t="Within a 10-minute walk of Piata Unirii, Cluj-Napoca: is there enough shelter capacity for the people living there?">⚖ Capacity vs people</div>
+    <div class="chip" data-t="How many people depend on the shelter nearest to Bulevardul Eroilor 1, Cluj-Napoca?">👥 Who depends on it</div>
+  </div>
+
+  <div id="inp-area">
+    <div id="inp-wrap">
+      <textarea id="inp" rows="1" placeholder="Ask about shelters, walking times, capacity…"></textarea>
+      <button id="send" disabled>↑</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   Map
+   ══════════════════════════════════════════════════════════════════════════ */
+const map=L.map('map',{center:[45.9,24.9],zoom:7,zoomControl:false});
+L.control.zoom({position:'bottomleft'}).addTo(map);
+/* OpenStreetMap standard tiles: public, free, no key and no account. One
+   host (the {s} subdomains are deprecated) and attribution kept visible,
+   as the OSM tile usage policy requires. */
+// detectRetina: on a high-DPI display, and in a screenshot taken with an
+// increased device pixel ratio, Leaflet otherwise stretches one 256 px tile
+// across several device pixels and the basemap turns soft while the interface
+// around it stays sharp. With it on, Leaflet fetches the next zoom level and
+// draws it at half size, so the map carries real detail at 2x.
+const tOSM=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19,detectRetina:true}).addTo(map);
+const tSAT=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:19,detectRetina:true});
+const grp={shelters:L.layerGroup().addTo(map),iso:L.layerGroup().addTo(map),service:L.layerGroup().addTo(map),points:L.layerGroup().addTo(map),selection:L.layerGroup().addTo(map)};
+const cnt={shelters:0,iso:0,service:0,points:0,selection:0};
+function addC(g,n=1){cnt[g]=Math.max(0,cnt[g]+n);const e=document.getElementById('c-'+g);if(e)e.textContent=cnt[g];}
+function rstC(g){cnt[g]=0;const e=document.getElementById('c-'+g);if(e)e.textContent=0;}
+map.on('mousemove',e=>{document.getElementById('coords').textContent=`${e.latlng.lat.toFixed(6)},  ${e.latlng.lng.toFixed(6)}`});
+
+/* Status is the whole point of this map: a shelter that exists but does not
+   work is a different fact from one that does, and the colour says so before
+   the popup is opened. */
+const STATUS={
+  functional:{c:'#22c55e',label:'functional'},
+  partially_functional:{c:'#f59e0b',label:'partially functional'},
+  non_functional:{c:'#ef4444',label:'non-functional'},
+  unknown:{c:'#64748b',label:'status unrecorded'}
+};
+const statusOf=s=>STATUS[s]||STATUS.unknown;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>v===null||v===undefined?'—':Number(v).toLocaleString('en-US');
+
+function shelterPopup(p){
+  const st=statusOf(p.status);
+  const gap=(p.capacity_nominal!=null&&p.capacity_effective!=null&&p.capacity_effective<p.capacity_nominal);
+  return `<strong>${esc(p.address||p.shelter_id)}</strong><br>
+    <span class="pc">${esc(p.shelter_id)}</span> · ${esc(p.locality||'')}<br>
+    <span class="st-pill" style="background:${st.c}22;color:${st.c}">${st.label}</span>
+    <span class="badge">${esc(p.type||'')}</span><br>
+    Capacity: <strong>${num(p.capacity_effective)}</strong> effective
+    ${gap?`<span class="cap-gap">/ ${num(p.capacity_nominal)} nominal</span>`:`of ${num(p.capacity_nominal)} nominal`}
+    ${p.distance_m!=null?`<br>Straight-line distance: ${num(p.distance_m)} m`:''}`;
+}
+
+function fitAll(){
+  const bb=[];
+  Object.values(grp).forEach(g=>g.eachLayer(l=>{try{
+    if(l.getBounds){const b=l.getBounds();if(b.isValid())bb.push(b);}
+    else if(l.getLatLng)bb.push(L.latLngBounds([l.getLatLng(),l.getLatLng()]));
+  }catch{}}));
+  if(bb.length)map.fitBounds(bb.reduce((a,b)=>a.extend(b)),{padding:[35,35]});
+}
+
+/* Tool responses carry no coordinates by design - the models never need them.
+   The map asks the server for the geometry of the shelters just mentioned. */
+async function drawShelters(list,{replace=true}={}){
+  const ids=(list||[]).map(s=>s.shelter_id).filter(Boolean);
+  if(!ids.length)return;
+  const byId={};(list||[]).forEach(s=>{byId[s.shelter_id]=s;});
+  let fc;
+  try{fc=await (await fetch('/api/map/shelters?ids='+encodeURIComponent(ids.join(',')))).json();}
+  catch(e){console.warn('map geometry unavailable',e);return;}
+  if(replace){grp.shelters.clearLayers();rstC('shelters');}
+  (fc.features||[]).forEach(f=>{
+    const p={...f.properties,...(byId[f.properties.shelter_id]||{})};
+    const st=statusOf(p.status);
+    const [lon,lat]=f.geometry.coordinates;
+    L.circleMarker([lat,lon],{radius:8,color:st.c,fillColor:st.c,fillOpacity:.75,weight:2})
+      .bindPopup(shelterPopup(p)).addTo(grp.shelters);
+    addC('shelters');
+  });
+  fitAll();
+  legendStatus(list);
+}
+
+function legendStatus(list){
+  const counts={};(list||[]).forEach(s=>{counts[s.status]=(counts[s.status]||0)+1;});
+  const rows=Object.entries(counts).map(([k,n])=>{
+    const st=statusOf(k);
+    return `<div class="lg-r"><div class="lg-sw circ" style="border-color:${st.c}"></div><span>${st.label} · ${n}</span></div>`;
+  }).join('');
+  if(!rows)return;
+  const nominal=(list||[]).reduce((a,s)=>a+(s.capacity_nominal||0),0);
+  const effective=(list||[]).reduce((a,s)=>a+(s.capacity_effective||0),0);
+  showLegend(`<div class="lg-t">Shelters (${(list||[]).length})</div>${rows}
+    <div class="lg-r" style="margin-top:3px"><span>Capacity ${num(effective)} effective / ${num(nominal)} nominal</span></div>`);
+}
+function showLegend(html){const l=document.getElementById('legend');l.innerHTML=html;l.style.display='flex';}
+
+function drawPolygon(geo,group,color,popup,label){
+  if(!geo)return;
+  grp[group].clearLayers();rstC(group);
+  L.geoJSON(geo,{style:{color,fillColor:color,fillOpacity:.13,weight:2}})
+    .bindPopup(popup).addTo(grp[group]);
+  addC(group);fitAll();
+  if(label)showLegend(label);
+}
+
+function mkIcon(col,em='📍',sz=27){
+  return L.divIcon({html:`<div style="width:${sz}px;height:${sz}px;background:${col};border:2px solid rgba(255,255,255,.25);border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4)"><span style="transform:rotate(45deg);font-size:${Math.round(sz*.44)}px">${em}</span></div>`,
+    iconSize:[sz,sz],iconAnchor:[sz/2,sz],popupAnchor:[0,-sz],className:''});
+}
+
+/* ── Renderers, one per response shape ── */
+function rdGeocode(d){
+  grp.points.clearLayers();rstC('points');
+  L.marker([d.lat,d.lon],{icon:mkIcon('#f472b6','📍',28)})
+    .bindPopup(`<strong>${esc(d.matched_name)}</strong><br><span class="pc">${d.lat}, ${d.lon}</span><br>
+      match level: <strong>${esc(d.match_level)}</strong> · confidence ${d.confidence}`)
+    .addTo(grp.points).openPopup();
+  addC('points');map.setView([d.lat,d.lon],15);
+}
+function rdShelterList(d){drawShelters(d.shelters||[]);}
+function rdShelter(d){
+  const c=d.geometry&&d.geometry.coordinates;
+  if(!c)return;
+  const st=statusOf(d.status);
+  grp.shelters.clearLayers();rstC('shelters');
+  L.circleMarker([c[1],c[0]],{radius:10,color:st.c,fillColor:st.c,fillOpacity:.8,weight:3})
+    .bindPopup(shelterPopup(d)).addTo(grp.shelters).openPopup();
+  addC('shelters');map.setView([c[1],c[0]],16);
+  legendStatus([d]);
+}
+function rdIsochrone(d){
+  drawPolygon(d.polygon,'iso','#a78bfa',
+    `<strong>${d.minutes} min on foot</strong><br>speed profile: ${esc(d.speed_profile)}<br>${d.area_km2??'?'} km²`,
+    `<div class="lg-t">Reachable on foot</div>
+     <div class="lg-r"><div class="lg-sw" style="background:#a78bfa"></div><span>${d.minutes} min · ${esc(d.speed_profile)} · ${d.area_km2??'?'} km²</span></div>`);
+}
+function rdServiceArea(d){
+  const ratio=d.demand_ratio===null||d.demand_ratio===undefined
+    ? '<span style="color:var(--red)">not defined</span>'
+    : `<strong>${d.demand_ratio}</strong> people per place`;
+  drawPolygon(d.service_area,'service','#38bdf8',
+    `<strong>${esc(d.shelter_id)} — served area</strong><br>${d.minutes} min · ${esc(d.speed_profile)}<br>
+     population served: ${num(d.population_served)}<br>effective capacity: ${num(d.capacity_effective)}<br>${ratio}`,
+    `<div class="lg-t">Who depends on ${esc(d.shelter_id)}</div>
+     <div class="lg-r"><div class="lg-sw" style="background:#38bdf8"></div><span>${num(d.population_served)} residents within ${d.minutes} min</span></div>
+     <div class="lg-r"><span>${ratio}</span></div>
+     ${d.note?`<div class="lg-r" style="color:var(--amber)"><span>${esc(d.note)}</span></div>`:''}`);
+  drawShelters([{shelter_id:d.shelter_id,status:d.status,capacity_nominal:d.capacity_nominal,capacity_effective:d.capacity_effective}]);
+}
+function rdTravel(d){
+  drawShelters([{shelter_id:d.shelter_id}],{replace:false});
+  if(d.walk_time_min===null)return;
+  showLegend(`<div class="lg-t">Walking time</div>
+    <div class="lg-r"><span>${d.walk_time_min} min · ${num(d.distance_m)} m along streets</span></div>
+    <div class="lg-r"><span style="color:var(--dim)">straight line ${num(d.straight_line_m)} m · ${esc(d.speed_profile)}</span></div>`);
+}
+function rdPopulation(d){
+  showLegend(`<div class="lg-t">Resident population</div>
+    <div class="lg-r"><span>${num(d.population)} people · ${d.area_km2} km²</span></div>
+    <div class="lg-r"><span style="color:var(--dim)">${d.cells_counted} cells · ${esc(d.method)}</span></div>`);
+}
+
+/* Rendering keyed on the SHAPE of the response, not the tool name: a second
+   MCP server returning compatible structures appears on the map with no
+   change here. */
+function detectShape(d){
+  if(!d||typeof d!=='object')return null;
+  if(d.error_code||d.error)return 'error';
+  if(d.service_area)return 'service_area';
+  if(d.polygon&&d.minutes!==undefined)return 'isochrone';
+  if(Array.isArray(d.shelters))return 'shelter_list';
+  if(d.geometry&&d.shelter_id)return 'shelter';
+  if(d.walk_time_min!==undefined)return 'travel';
+  if(d.population!==undefined&&d.cells_counted!==undefined)return 'population';
+  if(typeof d.lat==='number'&&typeof d.lon==='number'&&d.matched_name!==undefined)return 'geocode';
+  return null;
+}
+const RENDER={geocode:rdGeocode,shelter_list:rdShelterList,shelter:rdShelter,
+  isochrone:rdIsochrone,service_area:rdServiceArea,travel:rdTravel,population:rdPopulation};
+function handleTR(tool,d){const s=detectShape(d);if(s&&RENDER[s]){try{RENDER[s](d);}catch(e){console.warn('render',s,e);}}return s;}
+
+const SHAPE_META={
+  geocode:['📍','Location'],shelter_list:['🛡','Shelters'],shelter:['🛡','Shelter'],
+  isochrone:['⬡','Reachable area'],service_area:['🎯','Served area'],
+  travel:['🚶','Walking time'],population:['👥','Population'],error:['⚠️','Tool error']
+};
+function mkCard(tool,d,shape){
+  const [ic,lb]=SHAPE_META[shape]||['🔧',tool];
+  let m='';
+  if(shape==='geocode')m=`${esc(d.matched_name)} · ${esc(d.match_level)}`;
+  else if(shape==='shelter_list')m=`${d.count} shelters · ${num(d.total_capacity_effective??'')} effective / ${num(d.total_capacity_nominal??'')} nominal`.replace(' · — effective / — nominal','');
+  else if(shape==='shelter')m=`${esc(d.shelter_id)} · ${statusOf(d.status).label} · ${num(d.capacity_effective)}/${num(d.capacity_nominal)}`;
+  else if(shape==='isochrone')m=`${d.minutes} min · ${esc(d.speed_profile)} · ${d.area_km2} km²`;
+  else if(shape==='service_area')m=`${num(d.population_served)} residents · ratio ${d.demand_ratio===null?'not defined':d.demand_ratio}`;
+  else if(shape==='travel')m=d.walk_time_min===null?'not reachable on foot':`${d.walk_time_min} min · ${num(d.distance_m)} m`;
+  else if(shape==='population')m=`${num(d.population)} residents · ${d.area_km2} km²`;
+  else if(shape==='error')m=esc(d.error_code?`${d.error_code}: ${d.message||''}`:String(d.error)).slice(0,180);
+  const onMap=!!RENDER[shape];
+  const div=document.createElement('div');
+  div.className='card'+(shape==='error'?' err':'');
+  div.innerHTML=`<div class="card-t">${ic} ${lb}${onMap?' <span class="badge">on map</span>':''}</div>
+    <div class="card-m">${m?`<span>${m}</span>`:''}<span class="badge">${esc(tool)}</span>
+    ${d.note?`<span class="badge" title="${esc(d.note)}">note</span>`:''}</div>`;
+  return div;
+}
+
+/* ── Base layers, area selection, click actions ── */
+let selMode=false,selStart=null,selRect=null,selGeo=null,justSelected=false;
+const btSel=document.getElementById('bt-sel');
+function setSelMode(on){selMode=on;btSel.classList.toggle('on',on);map.dragging[on?'disable':'enable']();map.getContainer().style.cursor=on?'crosshair':'';}
+btSel.onclick=()=>setSelMode(!selMode);
+map.on('mousedown',e=>{if(!selMode)return;selStart=e.latlng;grp.selection.clearLayers();rstC('selection');
+  selRect=L.rectangle(L.latLngBounds(selStart,selStart),{color:'#e879f9',weight:2,dashArray:'6 4',fillColor:'#e879f9',fillOpacity:.08}).addTo(grp.selection);});
+map.on('mousemove',e=>{if(!selMode||!selStart||!selRect)return;selRect.setBounds(L.latLngBounds(selStart,e.latlng));});
+map.on('mouseup',e=>{
+  if(!selMode||!selStart)return;
+  const b=L.latLngBounds(selStart,e.latlng);selStart=null;setSelMode(false);justSelected=true;
+  if(b.getWest()===b.getEast()||b.getSouth()===b.getNorth()){grp.selection.clearLayers();selGeo=null;return;}
+  const w=+b.getWest().toFixed(6),ee=+b.getEast().toFixed(6),s=+b.getSouth().toFixed(6),n=+b.getNorth().toFixed(6);
+  selGeo={type:'Polygon',coordinates:[[[w,s],[ee,s],[ee,n],[w,n],[w,s]]]};
+  selRect.bindPopup('▭ Selected area — ask about it in the chat<br><small>e.g. "how many shelter places are in the selected area?"</small>');
+  addC('selection');
+});
+map.on('click',e=>{
+  if(justSelected){justSelected=false;return;}
+  if(selMode)return;
+  const la=e.latlng.lat.toFixed(6),lo=e.latlng.lng.toFixed(6);
+  L.popup().setLatLng(e.latlng).setContent(
+    `<div class="pc">${la}, ${lo}</div>
+     <div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">
+       <button class="pb" onclick="ask(${la},${lo},'near')">🛡 Shelters nearby</button>
+       <button class="pb" onclick="ask(${la},${lo},'iso')">⏱ 10-min walk</button>
+       <button class="pb" onclick="ask(${la},${lo},'cap')">⚖ Capacity vs people</button>
+     </div>`).openOn(map);
+});
+function ask(la,lo,t){
+  map.closePopup();
+  const q={
+    near:`Which usable shelters are within 800 m of ${la}, ${lo}?`,
+    iso:`What shelters can be reached in a 10-minute walk from ${la}, ${lo}?`,
+    cap:`Within a 10-minute walk of ${la}, ${lo}, compare the shelter capacity with the number of people living there.`
+  };
+  send(q[t]);
+}
+document.getElementById('bt-osm').onclick=()=>{tSAT.remove();tOSM.addTo(map);document.getElementById('bt-osm').classList.add('on');document.getElementById('bt-sat').classList.remove('on');};
+document.getElementById('bt-sat').onclick=()=>{tOSM.remove();tSAT.addTo(map);document.getElementById('bt-sat').classList.add('on');document.getElementById('bt-osm').classList.remove('on');};
+document.getElementById('bt-del').onclick=()=>{Object.entries(grp).forEach(([k,g])=>{g.clearLayers();rstC(k);});selGeo=null;document.getElementById('legend').style.display='none';};
+document.getElementById('bt-fit').onclick=fitAll;
+document.getElementById('mob-btn').onclick=()=>document.getElementById('chat').classList.toggle('open');
+
+/* ── Chat panel width ──────────────────────────────────────────────────────
+   The chat and the map share one row, so widening one narrows the other.
+   Leaflet caches the size of its container, so every change has to be
+   followed by invalidateSize() or the tiles keep the old layout. */
+const CHAT_W_KEY='enviroo_chat_width',CHAT_W_DEFAULT=390,CHAT_W_MIN=300;
+/* Upper bound leaves the map usable rather than letting the chat eat the row. */
+const chatMax=()=>Math.max(CHAT_W_MIN,Math.min(760,window.innerWidth-360));
+function setChatWidth(px,persist){
+  const w=Math.round(Math.max(CHAT_W_MIN,Math.min(chatMax(),px)));
+  document.documentElement.style.setProperty('--chat',w+'px');
+  if(persist){try{localStorage.setItem(CHAT_W_KEY,w);}catch(e){}}
+  return w;
+}
+try{const saved=parseInt(localStorage.getItem(CHAT_W_KEY),10);
+    if(saved)setChatWidth(saved,false);}catch(e){}
+
+const grip=document.getElementById('chat-grip');
+let dragW=null,dragRAF=0;
+grip.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  grip.setPointerCapture(e.pointerId);
+  document.body.classList.add('resizing');
+});
+grip.addEventListener('pointermove',e=>{
+  if(!grip.hasPointerCapture(e.pointerId))return;
+  dragW=window.innerWidth-e.clientX;
+  /* One resize per frame: a pointermove fires far more often than the map can
+     be laid out, and calling invalidateSize on every event stutters the drag. */
+  if(!dragRAF)dragRAF=requestAnimationFrame(()=>{
+    dragRAF=0;setChatWidth(dragW,false);map.invalidateSize({animate:false});
+  });
+});
+function endDrag(e){
+  if(!grip.hasPointerCapture(e.pointerId))return;
+  grip.releasePointerCapture(e.pointerId);
+  document.body.classList.remove('resizing');
+  if(dragRAF){cancelAnimationFrame(dragRAF);dragRAF=0;}
+  if(dragW!==null){setChatWidth(dragW,true);dragW=null;}
+  map.invalidateSize({animate:false});
+}
+grip.addEventListener('pointerup',endDrag);
+grip.addEventListener('pointercancel',endDrag);
+grip.addEventListener('dblclick',()=>{setChatWidth(CHAT_W_DEFAULT,true);map.invalidateSize({animate:false});});
+/* A window narrowed past the stored width would otherwise leave no map. */
+window.addEventListener('resize',()=>{
+  const cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--chat'),10);
+  if(cur>chatMax())setChatWidth(cur,false);
+});
+document.querySelectorAll('.li').forEach(el=>el.addEventListener('click',()=>{
+  const g=grp[el.dataset.g];if(!g)return;
+  if(map.hasLayer(g)){g.remove();el.style.opacity='.4';}else{g.addTo(map);el.style.opacity='1';}
+}));
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Chat, models, MCP registry
+   ══════════════════════════════════════════════════════════════════════════ */
+const msgsEl=document.getElementById('msgs'),inpEl=document.getElementById('inp'),
+      sendBtn=document.getElementById('send'),dotEl=document.getElementById('dot'),
+      modelSel=document.getElementById('model-sel');
+let ws=null,typEl=null;
+
+async function loadModels(){
+  try{
+    const d=await (await fetch('/api/models')).json();
+    modelSel.innerHTML='';
+    d.models.forEach(m=>{
+      const o=document.createElement('option');
+      o.value=m.id;o.textContent=m.label;o.disabled=!m.available;
+      if(m.id===d.default)o.selected=true;
+      modelSel.appendChild(o);
+    });
+  }catch(e){console.error('loadModels',e);}
+}
+loadModels();
+
+/* Tool selection is opt-out: a newly discovered tool is active. Ablations
+   (running a model with a tool withheld) are done by unticking here. */
+const DISABLED_KEY='enviroo_disabled_tools';
+let disabledTools=new Set(JSON.parse(localStorage.getItem(DISABLED_KEY)||'[]'));
+let ALL_TOOLS=[];
+function saveDisabled(){localStorage.setItem(DISABLED_KEY,JSON.stringify([...disabledTools]));}
+function enabledTools(){return ALL_TOOLS.filter(n=>!disabledTools.has(n));}
+function updateToolCount(){
+  const c=document.getElementById('mcp-cnt');c.textContent=ALL_TOOLS.length?enabledTools().length:'—';
+  const t=document.getElementById('mcp-total');if(t)t.textContent=`${ALL_TOOLS.length} tools · ${enabledTools().length} active`;
+}
+async function loadTools(){
+  const list=document.getElementById('mcp-list');
+  let d;try{d=await (await fetch('/api/tools')).json();}
+  catch(e){list.innerHTML='<div style="color:var(--red);font-size:11px">Could not load tools.</div>';return;}
+  ALL_TOOLS=[];d.servers.forEach(s=>s.tools.forEach(t=>ALL_TOOLS.push(t.name)));
+  renderServers(d.servers);updateToolCount();
+  // The regime every benchmark row will be stamped with, shown before a run
+  // rather than discovered in the CSV afterwards.
+  const st=document.getElementById('mcp-regime');
+  if(st&&d.descriptions){
+    const r=d.descriptions.regim||'?',c=d.descriptions.chars||0;
+    st.textContent=`descriptions: ${r} · ${c} chars`;
+    st.className='reg '+(r==='mixed'||r==='unknown'?'bad':r);
+  }
+}
+function renderServers(servers){
+  const list=document.getElementById('mcp-list');list.innerHTML='';
+  if(!servers.length){list.innerHTML='<div style="color:var(--dim);font-size:11px">No server registered.</div>';return;}
+  servers.forEach(s=>{
+    const on=s.enabled!==false;
+    const ok=String(s.status).startsWith('ok'),tools=s.tools||[];
+    // Off is a state, not a fault: grey, not red.
+    const dot=!on?'off':(ok?'ok':'err');
+    const srv=document.createElement('div');srv.className='srv'+(on?'':' off');
+    const hd=document.createElement('div');hd.className='srv-hd';
+    const reg=s.regime?`<span class="srv-reg ${esc(s.regime)}" title="published description set">${esc(s.regime)}</span>`:'';
+    hd.innerHTML=`<div class="srv-dot ${dot}"></div><span class="srv-nm">${esc(s.label)}</span>${reg}`
+      +`<button class="srv-on${on?' is-on':''}" title="${on?'Querying this server':'Not queried'}">${on?'on':'off'}</button>`
+      +`<span class="srv-ct">${tools.length}</span><button class="srv-del" title="Delete server">🗑</button>`;
+    const url=document.createElement('div');url.className='srv-url';url.textContent=s.url;
+    const act=document.createElement('div');act.className='srv-actions';
+    const a1=document.createElement('a');a1.textContent='all';a1.onclick=()=>{tools.forEach(t=>disabledTools.delete(t.name));saveDisabled();loadTools();};
+    const a2=document.createElement('a');a2.textContent='none';a2.onclick=()=>{tools.forEach(t=>disabledTools.add(t.name));saveDisabled();loadTools();};
+    act.appendChild(a1);act.appendChild(a2);
+    const tw=document.createElement('div');tw.className='srv-tools';
+    if(!ok){const e=document.createElement('div');e.style.cssText='font-size:10px;color:var(--red);padding:3px 4px';e.textContent=String(s.status);tw.appendChild(e);}
+    tools.forEach(t=>{
+      const row=document.createElement('label');row.className='tool-row';if(t.description)row.title=t.description;
+      const cb=document.createElement('input');cb.type='checkbox';cb.checked=!disabledTools.has(t.name);
+      cb.addEventListener('change',()=>{cb.checked?disabledTools.delete(t.name):disabledTools.add(t.name);saveDisabled();updateToolCount();});
+      const nm=document.createElement('span');nm.className='tn';nm.textContent=t.name;
+      row.appendChild(cb);row.appendChild(nm);tw.appendChild(row);
+    });
+    hd.querySelector('.srv-del').onclick=ev=>{ev.stopPropagation();delServer(s.url,s.label);};
+    hd.querySelector('.srv-on').onclick=async ev=>{ev.stopPropagation();await toggleServer(s.url,!on);};
+    hd.onclick=ev=>{if(ev.target.closest('.srv-del'))return;const h=tw.style.display==='none';tw.style.display=h?'flex':'none';act.style.display=h?'flex':'none';};
+    srv.appendChild(hd);srv.appendChild(url);srv.appendChild(act);srv.appendChild(tw);list.appendChild(srv);
+  });
+}
+async function addServer(){
+  const url=document.getElementById('mcp-url').value.trim(),label=document.getElementById('mcp-label').value.trim();
+  const err=document.getElementById('mcp-err');err.textContent='';if(!url)return;
+  const btn=document.getElementById('mcp-add-btn');btn.disabled=true;btn.textContent='...';
+  try{
+    const r=await fetch('/api/mcp/servers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,label})});
+    const d=await r.json();
+    if(!r.ok)err.textContent=d.detail||'Error adding server';
+    else{document.getElementById('mcp-url').value='';document.getElementById('mcp-label').value='';await loadTools();}
+  }catch(e){err.textContent=String(e);}
+  btn.disabled=false;btn.textContent='＋ Add';
+}
+async function delServer(url,label){
+  if(!confirm(`Delete server "${label}"?`))return;
+  const err=document.getElementById('mcp-err');err.textContent='';
+  try{
+    const r=await fetch('/api/mcp/servers?url='+encodeURIComponent(url),{method:'DELETE'});
+    const d=await r.json();if(!r.ok)err.textContent=d.detail||'Error deleting server';else await loadTools();
+  }catch(e){err.textContent=String(e);}
+}
+document.getElementById('mcp-btn').onclick=()=>{const p=document.getElementById('mcp-panel');p.classList.toggle('hidden');if(!p.classList.contains('hidden'))loadTools();};
+document.getElementById('mcp-close').onclick=()=>document.getElementById('mcp-panel').classList.add('hidden');
+/* Both description arms publish the same nine tool names, so only one can be
+   queried at a time; the registry keeps the other, switched off, one click
+   away. Deleting it instead would mean retyping a URL on every swap. */
+async function toggleServer(url,enabled){
+  const err=document.getElementById('mcp-err');err.textContent='';
+  try{
+    const r=await fetch('/api/mcp/toggle',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({url,enabled})});
+    if(!r.ok)throw new Error((await r.text()).slice(0,200));
+  }catch(e){err.textContent=e.message;}
+  await loadTools();
+}
+
+document.getElementById('mcp-add-btn').onclick=addServer;
+document.getElementById('mcp-url').addEventListener('keydown',e=>{if(e.key==='Enter')addServer();});
+document.getElementById('mcp-refresh').onclick=async()=>{document.getElementById('mcp-err').textContent='';try{await fetch('/api/mcp/refresh',{method:'POST'});}catch(e){}await loadTools();};
+document.getElementById('mcp-all').onclick=()=>{disabledTools.clear();saveDisabled();loadTools();};
+document.getElementById('mcp-none').onclick=()=>{ALL_TOOLS.forEach(n=>disabledTools.add(n));saveDisabled();loadTools();};
+loadTools();
+
+function connect(){
+  ws=new WebSocket(`ws://${location.host}/ws/chat`);
+  ws.onopen=()=>{dotEl.className='ok';sendBtn.disabled=inpEl.value.trim()==='';};
+  ws.onclose=()=>{dotEl.className='err';sendBtn.disabled=true;setTimeout(connect,3000);};
+  ws.onerror=()=>{dotEl.className='err';};
+  ws.onmessage=e=>{
+    const m=JSON.parse(e.data);
+    if(m.type==='typing'){showTyp();}
+    else if(m.type==='tool_result'){
+      hideTyp();
+      const s=handleTR(m.tool,m.data);
+      const row=document.createElement('div');row.className='row a';
+      row.appendChild(mkCard(m.tool,m.data,s));msgsEl.appendChild(row);sb();
+    }
+    else if(m.type==='message'){hideTyp();addMsg('a',m.content);}
+    else if(m.type==='error'){hideTyp();addMsg('a',`⚠️ ${m.content}`);}
+  };
+}
+function showTyp(){if(typEl)return;typEl=document.createElement('div');typEl.className='row a';typEl.innerHTML='<div class="typing"><div class="td"></div><div class="td"></div><div class="td"></div></div>';msgsEl.appendChild(typEl);sb();}
+function hideTyp(){if(typEl){typEl.remove();typEl=null;}}
+function addMsg(role,text){const row=document.createElement('div');row.className=`row ${role}`;const b=document.createElement('div');b.className='bubble';b.innerHTML=role==='a'?marked.parse(text||''):esc(text);row.appendChild(b);msgsEl.appendChild(row);sb();}
+function sb(){msgsEl.scrollTop=msgsEl.scrollHeight;}
+function send(txt){
+  txt=(txt||inpEl.value).trim();
+  if(!txt||!ws||ws.readyState!==1)return;
+  addMsg('u',txt);
+  const payload={message:txt,model:modelSel.value||null};
+  // No key until the registry has loaded => the backend offers every tool.
+  if(ALL_TOOLS.length)payload.enabled_tools=enabledTools();
+  if(selGeo)payload.map_selection=selGeo;
+  ws.send(JSON.stringify(payload));inpEl.value='';inpEl.style.height='auto';sb();
+}
+sendBtn.addEventListener('click',()=>send());
+inpEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+inpEl.addEventListener('input',()=>{sendBtn.disabled=!inpEl.value.trim();inpEl.style.height='auto';inpEl.style.height=Math.min(inpEl.scrollHeight,110)+'px';});
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>send(c.dataset.t)));
+connect();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Benchmark — runs one task from golden_chains.json with one model and shows
+   the metrics. Every run is appended to benchmark/results/metrics.csv.
+   ══════════════════════════════════════════════════════════════════════════ */
+const bnPanel=document.getElementById('bench-panel'),bnBody=document.getElementById('bench-body'),
+      bnTask=document.getElementById('bn-task'),bnModel=document.getElementById('bn-model'),
+      bnRun=document.getElementById('bn-run'),bnStatus=document.getElementById('bn-status'),
+      bnRunAll=document.getElementById('bn-run-all'),bnStop=document.getElementById('bn-stop');
+let BN_TASKS=[],BN_LAST=null;
+
+const bnFmt=(v,d=2)=>v===null||v===undefined||v===''?'—':(typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(d)):v);
+const bnPct=v=>v===null||v===undefined?'—':Math.round(v*100)+'%';
+
+async function bnLoad(){
+  try{
+    const t=await (await fetch('/api/bench/tasks')).json();
+    BN_TASKS=t.tasks||[];
+    const order={easy:0,medium:1,hard:2,special:3};
+    BN_TASKS.sort((a,b)=>(order[a.difficulty]??9)-(order[b.difficulty]??9)||a.id.localeCompare(b.id));
+    bnTask.innerHTML=BN_TASKS.map(t=>
+      `<option value="${t.id}">${t.id} · ${esc(t.title)} (${t.golden_steps} steps)</option>`).join('');
+  }catch(e){bnBody.innerHTML=`<div class="bn-err">Could not load tasks: ${esc(e.message)}</div>`;}
+  try{
+    const m=await (await fetch('/api/models')).json();
+    bnModel.innerHTML=(m.models||[]).map(x=>
+      `<option value="${x.id}"${x.available?'':' disabled'}>${esc(x.label)}${x.available?'':' (no key)'}</option>`).join('');
+    if(modelSel.value)bnModel.value=modelSel.value;
+  }catch(e){}
+  bnShowTask();
+}
+
+function bnShowTask(){
+  const t=BN_TASKS.find(x=>x.id===bnTask.value);
+  if(!t){bnBody.innerHTML='<div class="bn-err">No task in benchmark/golden_chains.json yet.</div>';return;}
+  const chain=(t.golden_chain||[]);
+  bnBody.innerHTML=`<div class="bn-task">
+      <div class="q">${esc(t.prompt)}</div>
+      ${t.prompt_ro?`<div class="bn-ro">${esc(t.prompt_ro)}</div>`:''}
+      <div class="m"><span class="bn-tag ${t.difficulty}">${t.difficulty}</span>
+        <span class="bn-tag">${t.golden_steps} steps</span>
+        <span class="bn-tag">${esc((t.servers||[]).join(', '))}</span>
+        ${(t.capabilities||[]).map(n=>`<span class="bn-tag">${esc(n)}</span>`).join('')}
+        ${(t.requires||[]).map(n=>`<span class="bn-tag">⚠ ${esc(n)}</span>`).join('')}</div>
+    </div>
+    <div class="bn-sec">Reference chain</div>
+    ${chain.length
+      ? `<div class="bn-chain">${chain.map(c=>
+          `<div class="bn-step" title="${esc(c.purpose||'')}">
+             <span class="ix">${c.step}</span><span class="nm">${esc(c.tool)}</span></div>`).join('')}</div>`
+      : '<div class="bn-asrt"><span class="b">·</span><span>No tool call. Answering with one is the failure.</span></div>'}
+    ${t.expected_answer?`<div class="bn-sec">Expected answer</div>
+      <div class="bn-ref">${esc(t.expected_answer)}</div>`:''}
+    <div class="bn-sec">Tracked pitfalls</div>
+    ${(t.pitfalls||[]).map(c=>`<div class="bn-asrt"><span class="b">·</span><span>${esc(c)}</span></div>`).join('')||'<div class="bn-asrt">—</div>'}
+    ${t.notes?`<div class="bn-sec">Note</div><div class="bn-ref">${esc(t.notes)}</div>`:''}`;
+}
+
+function bnKpi(k,v,cls=''){return `<div class="bn-kpi"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;}
+
+/* A step of the chain. When a real call sits behind it, the row expands and
+   shows the arguments exactly as they were sent. */
+function bnStep({idx,name,cls,status,callIdx},calls){
+  const call=(callIdx!==null&&callIdx!==undefined)?calls[callIdx]:null;
+  const open=call?' can-open':'';
+  const chev=call?'<span class="ch">▸</span>':'';
+  const failed=call&&call.ok===false?'<span class="err-dot" title="call failed">●</span>':'';
+  const row=`<div class="bn-step ${cls}${open}"${call?` data-call="${callIdx}"`:''}>
+      <span class="ix">${idx}</span><span class="nm">${esc(name)}</span>
+      ${failed}<span class="st">${status}</span>${chev}</div>`;
+  return row+(call?bnArgs(call,callIdx):'');
+}
+function bnArgs(call,callIdx){
+  const body=(call.args===null||call.args===undefined)
+    ? '(no valid arguments — the model sent unparsable JSON)'
+    : JSON.stringify(call.args,null,2);
+  const err=call.error?`<div class="cerr">⚠ ${esc(String(call.error))}</div>`:'';
+  return `<div class="bn-args" data-args="${callIdx}">
+      <div class="bn-args-h">round ${call.round??'?'} · ${call.ok===false?'FAILED':'ok'}</div>
+      <pre>${esc(body)}</pre>${err}</div>`;
+}
+function bnWireChain(){
+  bnBody.querySelectorAll('.bn-step.can-open').forEach(step=>{
+    step.addEventListener('click',()=>{
+      const box=bnBody.querySelector(`.bn-args[data-args="${step.dataset.call}"]`);
+      if(!box)return;
+      const show=!box.classList.contains('open');
+      box.classList.toggle('open',show);step.classList.toggle('open',show);
+    });
+  });
+  const setAll=show=>{
+    bnBody.querySelectorAll('.bn-args').forEach(b=>b.classList.toggle('open',show));
+    bnBody.querySelectorAll('.bn-step.can-open').forEach(s=>s.classList.toggle('open',show));
+  };
+  const ea=document.getElementById('bn-exp-all'),ca=document.getElementById('bn-col-all');
+  if(ea)ea.onclick=()=>setAll(true);
+  if(ca)ca.onclick=()=>setAll(false);
+}
+
+function bnRender(r){
+  BN_LAST=r;
+  const m=r.metrics,goldenTools=r.task.golden_chain.map(s=>s.tool);
+  const called=m.tools_called||[];
+  const calls=r.calls||[];
+  // Reconstruct the greedy matching exactly as the scorer did, so the display
+  // shows what was actually scored.
+  const used=new Set();const hit={};
+  goldenTools.forEach((g,gi)=>{for(let ai=0;ai<called.length;ai++){if(!used.has(ai)&&called[ai]===g){hit[gi]=ai;used.add(ai);break;}}});
+
+  bnBody.innerHTML=`
+    ${r.error?`<div class="bn-err">Run failed: ${esc(r.error)}</div>`:''}
+    <div class="bn-grid">
+      ${bnKpi('Success',m.strict_success?'YES':'NO',m.strict_success?'ok':'bad')}
+      ${bnKpi('Partial credit',bnPct(m.partial_credit))}
+      ${bnKpi('Tool F1',bnFmt(m.m3_tool_f1))}
+      ${bnKpi('Tool precision',bnPct(m.m1_tool_precision))}
+      ${bnKpi('Tool coverage',bnPct(m.m2_tool_coverage))}
+      ${bnKpi('Parameters',bnPct(m.m4_param_accuracy),m.m4_param_accuracy===1?'ok':(m.m4_param_accuracy<0.8?'bad':'warn'))}
+      ${bnKpi('Dep. violations',bnFmt(m.m5_dependency_violations),m.m5_dependency_violations>0?'bad':'ok')}
+      ${bnKpi('Calls',`${m.calls_total}/${m.golden_steps}`)}
+      ${bnKpi('Extra',bnFmt(m.calls_redundant),m.calls_redundant>0?'warn':'ok')}
+      ${bnKpi('Retry',bnFmt(m.m8_semantic_retry),m.m8_semantic_retry>0?'warn':'')}
+      ${bnKpi('Call errors',bnPct(m.m9_call_error_rate),m.m9_call_error_rate>0?'warn':'ok')}
+      ${bnKpi('Rounds',bnFmt(m.m11_rounds))}
+      ${bnKpi('Tokens',(m.m12_total_tokens||0).toLocaleString('en-US'))}
+      ${bnKpi('Context overhead',(m.m13_context_overhead||0).toLocaleString('en-US'))}
+      ${bnKpi('Cost $',m.m14_cost_usd===null?'—':m.m14_cost_usd.toFixed(4))}
+      ${bnKpi('Duration',Math.round((m.m16_duration_ms||0)/1000)+'s')}
+    </div>
+    ${(m.m21_fabrication||m.m22_hallucination)?`<div class="bn-err">
+      ${m.m21_fabrication?'⚠ FABRICATION: an answer with figures without any relevant tool call. ':''}
+      ${m.m22_hallucination?'⚠ HALLUCINATION: every call failed, but the answer does not say so.':''}</div>`:''}
+
+    <div class="bn-sec">Golden chain vs. what the model called</div>
+    <div class="bn-chain-tools">
+      <a id="bn-exp-all">expand all</a><a id="bn-col-all">collapse all</a>
+      <span style="font-size:9px;color:var(--dim)">click a step to see the arguments sent</span>
+    </div>
+    <div class="bn-chain">
+      ${goldenTools.map((g,gi)=>bnStep({
+          idx: gi+1, name: g, cls: gi in hit?'hit':'miss',
+          status: gi in hit?'✓ call #'+(hit[gi]+1):'missing',
+          callIdx: gi in hit?hit[gi]:null}, calls)).join('')}
+      ${called.map((c,ai)=>used.has(ai)?'':bnStep({
+          idx: '+', name: c, cls: 'extra', status: 'extra', callIdx: ai}, calls)).join('')}
+    </div>
+
+    ${(m.param_errors||[]).length?`<div class="bn-sec">Parameter errors (${m.param_errors.length})</div>
+      ${m.param_errors.map(e=>`<div class="bn-asrt fail"><span class="b">✕</span><span>
+        <code>${esc(e.tool)}.${esc(e.param)}</code> — ${esc(e.type)}
+        ${e.type==='value'?`: expected <code>${esc(JSON.stringify(e.expected))}</code>, got <code>${esc(JSON.stringify(e.received))}</code>`:''}
+      </span></div>`).join('')}`:''}
+
+    <div class="bn-sec">Assertions (${m.auto_assertions_passed}/${m.auto_assertions_total} auto, ${m.manual_assertions} manual)</div>
+    ${(m.detalii_asertiuni||[]).map(a=>`<div class="bn-asrt ${a.verdict}">
+        <span class="b">${a.verdict==='ok'?'✓':a.verdict==='fail'?'✕':'?'}</span>
+        <span>${esc(a.path||a.type)} <span style="color:var(--dim)">[${esc(a.type)}${a.value!==null&&a.value!==undefined?' = '+esc(JSON.stringify(a.value)).slice(0,60):''}]</span></span>
+      </div>`).join('')}
+
+    <div class="bn-sec">Model's answer</div>
+    <div class="bn-ans">${esc(r.answer||'(empty)')}</div>
+
+    <div class="bn-sec">Observation</div>
+    <div class="bn-verdict">
+      <span style="font-size:10px;color:var(--dim)">Manual verdict:</span>
+      <button data-v="corect">✓ Correct</button>
+      <button data-v="partial">~ Partial</button>
+      <button data-v="gresit">✕ Incorrect</button>
+    </div>
+    <textarea id="bn-note" placeholder="Notes: what the model got wrong, which pitfall it fell into, which manual assertions you checked, observations for the error taxonomy…"></textarea>
+    <div class="bn-save">
+      <button id="bn-save-btn">💾 Save</button>
+      <span class="msg" id="bn-save-msg">→ metrics.csv + observatii.csv</span>
+    </div>`;
+
+  bnWireChain();
+
+  // The verdict is only selected here; it is written on Save, so verdict and
+  // note reach the store together as one observation.
+  let verdict='';
+  bnBody.querySelectorAll('.bn-verdict button').forEach(b=>b.addEventListener('click',()=>{
+    bnBody.querySelectorAll('.bn-verdict button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');verdict=b.dataset.v;
+  }));
+
+  const saveBtn=document.getElementById('bn-save-btn'),saveMsg=document.getElementById('bn-save-msg');
+  saveBtn.addEventListener('click',async()=>{
+    const note=document.getElementById('bn-note').value.trim();
+    if(!verdict&&!note){saveMsg.className='msg err';saveMsg.textContent='choose a verdict or write a note';return;}
+    saveBtn.disabled=true;saveMsg.className='msg';saveMsg.textContent='saving…';
+    try{
+      const res=await fetch('/api/bench/save',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({run_id:r.run_id,verdict,note})});
+      if(!res.ok)throw new Error((await res.text()).slice(0,200));
+      const d=await res.json();
+      // The verdict goes to two files. If only one write landed, saying
+      // "saved" would hide a lost annotation, so the two are reported apart.
+      if(d.metrics_updated===false){
+        saveMsg.className='msg err';
+        saveMsg.textContent=`⚠ observatii.csv only — run not in metrics.csv`;
+        bnStatus.textContent=`${r.run_id} · NOT written to metrics.csv`;
+      }else{
+        saveMsg.className='msg ok';
+        saveMsg.textContent=`✓ metrics.csv + observatii.csv · ${d.total_observatii} observations`;
+        bnStatus.textContent=`${r.run_id} · verdict and note saved`;
+      }
+    }catch(e){saveMsg.className='msg err';saveMsg.textContent=e.message;}
+    finally{saveBtn.disabled=false;}
+  });
+  bnStatus.textContent=`${r.run_id} · rep ${r.repetition} · ${r.csv}`;
+}
+
+async function bnDoRun(){
+  const taskId=bnTask.value,modelId=bnModel.value;
+  if(!taskId||!modelId)return;
+  bnRun.disabled=true;
+  bnBody.innerHTML=`<div class="bn-run"><div class="sp"></div>Running ${esc(taskId)} with ${esc(modelId)}… (may take minutes)</div>`;
+  bnStatus.textContent='running…';
+  try{
+    const res=await fetch('/api/bench/run',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({task_id:taskId,model:modelId})});
+    if(!res.ok){const t=await res.text();throw new Error(t.slice(0,300));}
+    bnRender(await res.json());
+  }catch(e){
+    bnBody.innerHTML=`<div class="bn-err">${esc(e.message)}</div>`;
+    bnStatus.textContent='error';
+  }finally{bnRun.disabled=false;}
+}
+
+/* ── Bulk run ──────────────────────────────────────────────────────────────
+   Every task, in the order the selector shows them, with one model or with
+   all of them. Stopping is checked between tasks: a request already in flight
+   is allowed to finish and be recorded, because discarding a result that the
+   server has already scored and written would leave the CSV and the screen
+   disagreeing. */
+let bnStopping=false;
+
+async function bnRunAll_(){
+  const models=document.getElementById('bn-all-models').checked
+    ? [...bnModel.options].filter(o=>!o.disabled).map(o=>o.value)
+    : [bnModel.value];
+  const tasks=BN_TASKS.map(t=>t.id);
+  if(!tasks.length||!models.length||!models[0])return;
+
+  const jobs=[];
+  for(const m of models)for(const t of tasks)jobs.push({task:t,model:m});
+
+  bnStopping=false;
+  bnRun.disabled=true;bnRunAll.disabled=true;
+  bnStop.hidden=false;
+  const started=Date.now();
+  let ok=0,failed=0,errored=0;
+  const failedList=[];
+
+  bnBody.innerHTML=`<div class="bn-bulk">
+      <div class="hd"><div class="sp"></div><span id="bulk-now">starting…</span></div>
+      <div class="bar"><i id="bulk-bar" style="width:0"></i></div>
+      <div class="log" id="bulk-log"></div>
+    </div>`;
+  const now=document.getElementById('bulk-now'),bar=document.getElementById('bulk-bar'),
+        logEl=document.getElementById('bulk-log');
+  const line=(cls,txt)=>{const d=document.createElement('div');d.className=cls;d.textContent=txt;
+    logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;};
+
+  for(let i=0;i<jobs.length;i++){
+    if(bnStopping){line('no',`stopped after ${i} of ${jobs.length}`);break;}
+    const j=jobs[i];
+    now.textContent=`${i+1}/${jobs.length} · ${j.task} · ${j.model}`;
+    bar.style.width=`${(i/jobs.length)*100}%`;
+    bnStatus.textContent=`sweep ${i+1}/${jobs.length}`;
+    const t0=Date.now();
+    try{
+      const res=await fetch('/api/bench/run',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({task_id:j.task,model:j.model})});
+      if(!res.ok)throw new Error((await res.text()).slice(0,120));
+      const d=await res.json();
+      // A run whose provider call never landed is not a failed measurement, it
+      // is an absent one: it says nothing about the model and has to be rerun.
+      // Counting it as a failure would quietly depress every rate in the file.
+      if(d.error){
+        errored++;failedList.push(`${j.task}/${j.model} (${d.error})`);
+        line('er',`! ${j.task} · ${j.model} · ${d.error} · RERUN`);
+      }else{
+        const s=d.metrics&&d.metrics.strict_success;
+        s?ok++:failed++;
+        if(!s)failedList.push(`${j.task}/${j.model}`);
+        line(s?'ok':'no',
+          `${s?'✓':'✕'} ${j.task} · ${j.model} · ${((Date.now()-t0)/1000).toFixed(1)}s · ${d.run_id||''}`);
+      }
+    }catch(e){
+      // A provider hiccup on one task is not a reason to lose the rest.
+      errored++;failedList.push(`${j.task}/${j.model} (error)`);
+      line('er',`! ${j.task} · ${j.model} · ${e.message}`);
+    }
+  }
+
+  bar.style.width='100%';
+  const mins=((Date.now()-started)/60000).toFixed(1);
+  now.textContent=`done · ${ok} passed · ${failed} failed · ${errored} to rerun · ${mins} min`;
+  document.querySelector('.bn-bulk .sp').remove();
+  bnStatus.textContent=`sweep finished: ${ok}/${ok+failed+errored}`;
+  if(failedList.length)line('no',`not passed: ${failedList.join(', ')}`);
+  bnRun.disabled=false;bnRunAll.disabled=false;bnStop.hidden=true;
+}
+
+async function bnHistory(){
+  bnStatus.textContent='loading history…';
+  try{
+    const d=await (await fetch('/api/bench/results?limit=40')).json();
+    const s=d.sumar||[],r=d.rulari||[];
+    bnBody.innerHTML=`
+      <div class="bn-sec">Aggregate per model</div>
+      <table class="bn-tbl"><tr><th>Model</th><th>N</th><th>Success</th><th>F1</th><th>Param</th>
+        <th>Extra</th><th>Retry</th><th>Tokens</th><th>Cost</th></tr>
+        ${s.map(x=>`<tr><td>${esc(x.model_id)}</td><td>${x.rulari}</td><td>${bnPct(x.succes)}</td>
+          <td>${bnFmt(x.f1_tool)}</td><td>${bnPct(x.param)}</td><td>${bnFmt(x.redundanta)}</td>
+          <td>${bnFmt(x.retry,1)}</td><td>${Math.round(x.tokens||0).toLocaleString('en-US')}</td>
+          <td>${x.cost===null?'—':'$'+Number(x.cost).toFixed(4)}</td></tr>`).join('')||'<tr><td colspan="9">no runs</td></tr>'}
+      </table>
+      <div class="bn-sec">Recent runs</div>
+      <table class="bn-tbl"><tr><th>Task</th><th>Model</th><th>Rep</th><th>Success</th><th>F1</th>
+        <th>Param</th><th>Tokens</th><th>Manual</th></tr>
+        ${r.map(x=>`<tr><td>${esc(x.task_id)}</td><td>${esc(x.model_id)}</td><td>${esc(x.repetition)}</td>
+          <td style="color:${x.strict_success==='1'?'var(--green)':'var(--red)'}">${x.strict_success==='1'?'YES':'NO'}</td>
+          <td>${bnFmt(parseFloat(x.m3_tool_f1))}</td><td>${x.m4_param_accuracy?bnPct(parseFloat(x.m4_param_accuracy)):'—'}</td>
+          <td>${Number(x.m12_total_tokens||0).toLocaleString('en-US')}</td><td>${esc(x.manual_verdict||'')}</td></tr>`).join('')||'<tr><td colspan="8">no runs</td></tr>'}
+      </table>`;
+    bnStatus.textContent=`${r.length} runs shown`;
+  }catch(e){bnBody.innerHTML=`<div class="bn-err">${esc(e.message)}</div>`;}
+}
+
+document.getElementById('bench-btn').addEventListener('click',()=>{bnPanel.classList.remove('hidden');if(!BN_TASKS.length)bnLoad();});
+document.getElementById('bench-close').addEventListener('click',()=>bnPanel.classList.add('hidden'));
+/* The panel width is remembered between openings: when analysing a campaign
+   you want it wide all the time. */
+const bnWideBtn=document.getElementById('bn-wide');
+function bnSetWide(on){
+  bnPanel.classList.toggle('wide',on);
+  bnWideBtn.textContent=on?'⤡':'⤢';
+  bnWideBtn.title=on?'Shrink panel back to the sidebar':'Expand panel (full window)';
+  localStorage.setItem('enviroo_bench_wide',on?'1':'0');
+}
+bnWideBtn.addEventListener('click',()=>bnSetWide(!bnPanel.classList.contains('wide')));
+bnSetWide(localStorage.getItem('enviroo_bench_wide')==='1');
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!bnPanel.classList.contains('hidden')&&bnPanel.classList.contains('wide'))bnSetWide(false);
+});
+bnTask.addEventListener('change',bnShowTask);
+bnRun.addEventListener('click',bnDoRun);
+bnRunAll.addEventListener('click',bnRunAll_);
+bnStop.addEventListener('click',()=>{bnStopping=true;bnStop.disabled=true;
+  bnStatus.textContent='stopping after the current task…';});
+document.getElementById('bn-hist').addEventListener('click',bnHistory);
+document.getElementById('bn-csv').addEventListener('click',()=>window.open('/api/bench/csv','_blank'));
+document.getElementById('bn-obs').addEventListener('click',()=>window.open('/api/bench/observations','_blank'));
+</script>
+</body>
+</html>

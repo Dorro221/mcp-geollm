@@ -1,0 +1,71 @@
+# ── Secrete ───────────────────────────────────────────────────────────────
+# Orice fisier care poarta valori reale de mediu, sub orice nume. Regula `.env`
+# singura nu a prins `eenv_txt.txt`, care era exact un .env cu alt nume si a
+# ajuns in istoric cu cheile in el; de aceea tiparele de mai jos sunt largi.
+.env
+.env.*
+!.env.example
+*env_txt*
+*.key
+*.pem
+secrets.*
+credentials.*
+
+# ── Mediu si cache ────────────────────────────────────────────────────────
+env/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Jurnale si iesiri de rulare ───────────────────────────────────────────
+logs/
+*.log
+*.log.[0-9]
+
+# ── Copii de lucru ────────────────────────────────────────────────────────
+# Instantanee luate inainte de fiecare transformare a datelor. Utile cat timp
+# lucrezi, fara valoare pentru cineva care citeste rezultatul: campania e in
+# metrics.csv, iar cum s-a ajuns la ea e descris in articol.
+*.bak
+*.bak.csv
+*.ro.bak
+*.tmp
+*.orig
+*~
+
+# ── Instantanee de campanie inlocuite ─────────────────────────────────────
+# Rulari partiale si campanii anterioare. Setul raportat e metrics.csv; a
+# publica si variantele intermediare invita cititorul sa compare numere care
+# provin din proiecte experimentale diferite.
+benchmark/results/metrics_*.csv
+benchmark/results/metrics[ -]*.csv
+benchmark/results.zip
+
+# ── Manuscrisul si recenzia ───────────────────────────────────────────────
+# Depozitul publica materialele studiului, nu redactarea lui.
+articol/
+*.docx
+*.pdf
+~$*
+
+# ── Sistem de operare si editor ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Lantul de referinta dinaintea campaniei raportate.
+benchmark/golden_chains_old.json
+
+# ── Tinute in afara depozitului public, deliberat ─────────────────────────
+benchmark/results/observatii.csv
+benchmark/results/validare_umana*
+benchmark/analiza_provideri.py
+benchmark/preia_validare_umana.py
+benchmark/rescore_m25.py
+teste_orchestrare_adaposturi.md

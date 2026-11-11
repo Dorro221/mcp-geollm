@@ -1,0 +1,67 @@
+# Seed settlements for the modelled population surface.
+#
+# `population` figures are the resident populations of the 2021 Romanian
+# census, rounded; coordinates are the approximate town centres. They are
+# SEEDS for a modelled surface, not measurements of any grid cell — see
+# db/etl_population.py and the README section "Population data".
+#
+# Replace this whole mechanism with a real gridded product (WorldPop, GHS-POP)
+# via:  python -m db.etl_population --source <cells.csv>
+name,lat,lon,population
+Bucuresti,44.4325,26.1039,1716961
+Cluj-Napoca,46.7712,23.6236,286598
+Iasi,47.1585,27.6014,271692
+Constanta,44.1733,28.6383,263688
+Timisoara,45.7489,21.2087,250849
+Brasov,45.6579,25.6012,237589
+Craiova,44.3302,23.7949,234140
+Galati,45.4353,28.0080,217851
+Sibiu,45.7983,24.1256,147245
+Oradea,47.0465,21.9189,183105
+Ploiesti,44.9469,26.0367,180540
+Braila,45.2692,27.9575,154686
+Arad,46.1866,21.3123,145078
+Pitesti,44.8565,24.8692,141275
+Bacau,46.5670,26.9146,136000
+Targu Mures,46.5425,24.5575,116033
+Baia Mare,47.6573,23.5681,108759
+Buzau,45.1500,26.8333,100000
+Botosani,47.7486,26.6694,91000
+Satu Mare,47.7900,22.8858,91000
+Ramnicu Valcea,45.1047,24.3754,88000
+Suceava,47.6514,26.2556,84000
+Piatra Neamt,46.9275,26.3708,78000
+Drobeta-Turnu Severin,44.6369,22.6597,78000
+Focsani,45.6969,27.1864,73000
+Bistrita,47.1333,24.4833,68000
+Targu Jiu,45.0353,23.2747,65000
+Tulcea,45.1717,28.7914,65000
+Targoviste,44.9247,25.4567,63000
+Slatina,44.4300,24.3700,63000
+Resita,45.3008,21.8892,58000
+Alba Iulia,46.0667,23.5833,58000
+Calarasi,44.2058,27.3306,55000
+Vaslui,46.6383,27.7292,55000
+Zalau,47.1911,23.0575,52000
+Giurgiu,43.9037,25.9699,52000
+Sfantu Gheorghe,45.8636,25.7875,51000
+Deva,45.8833,22.9000,51000
+Hunedoara,45.7500,22.9000,50000
+Barlad,46.2286,27.6714,47000
+Roman,46.9294,26.9236,46000
+Turda,46.5667,23.7833,43000
+Slobozia,44.5647,27.3661,40000
+Medias,46.1667,24.3500,39000
+Alexandria,43.9700,25.3300,39000
+Lugoj,45.6889,21.9033,35000
+Medgidia,44.2492,28.2708,34000
+Miercurea Ciuc,46.3600,25.8000,34000
+Sighetu Marmatiei,47.9300,23.8900,34000
+Mangalia,43.8167,28.5833,33000
+Petrosani,45.4167,23.3667,33000
+Pascani,47.2500,26.7167,33000
+Campina,45.1258,25.7364,32000
+Onesti,46.2500,26.7667,31000
+Fagaras,45.8500,24.9700,30000
+Floresti,46.7450,23.4900,30000
+Curtea de Arges,45.1400,24.6800,27000
